@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Split Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#121210; --panel:#1a1a17; --panel2:#201f1c; --border:#33322d; --border-soft:#262620;
+    --text:#f1efe6; --text-dim:#a8a599; --text-mute:#716e63;
+    --accent:#cf4436; --accent-dim:#7a2b23;
+    --p1:#3f8fd1; --p2:#cf4436;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter',sans-serif; font-size:14px; line-height:1.4;
+  }
+  h1,h2,h3{font-family:'Barlow Condensed',sans-serif; font-weight:700; letter-spacing:0.02em; margin:0;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  header{
+    padding:18px 24px 14px; border-bottom:1px solid var(--border);
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+  header h1{font-size:28px; text-transform:uppercase;}
+  header p{margin:2px 0 0; color:var(--text-dim); font-size:13px;}
+  .legend{display:flex; flex-wrap:wrap; gap:6px 14px; padding:10px 24px; border-bottom:1px solid var(--border); background:var(--panel2);}
+  .legend span{display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.03em;}
+  .legend i{width:10px; height:10px; border-radius:2px; display:inline-block;}
+  .layout{display:grid; grid-template-columns:360px 1fr; gap:0; min-height:calc(100vh - 100px);}
+  @media (max-width:900px){ .layout{grid-template-columns:1fr;} }
+
+  /* LIBRARY */
+  .library{border-right:1px solid var(--border); padding:16px; background:var(--panel);}
+  .controls{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+  input[type=text]{
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    padding:8px 10px; border-radius:6px; font-size:13px; font-family:'Inter',sans-serif;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--accent);}
+  .row{display:flex; gap:6px; flex-wrap:wrap;}
+  .chip-btn{
+    border:1px solid var(--border); background:var(--panel2); color:var(--text-dim);
+    padding:4px 9px; border-radius:20px; font-size:11px; cursor:pointer; user-select:none;
+    text-transform:uppercase; letter-spacing:0.02em; transition:all .12s;
+  }
+  .chip-btn:hover{border-color:var(--border-soft); color:var(--text);}
+  .chip-btn.active{background:var(--accent-dim); border-color:var(--accent); color:#fff;}
+  select{
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    padding:6px 8px; border-radius:6px; font-size:12px; font-family:'Inter',sans-serif;
+  }
+  .view-toggle{display:flex; gap:6px; margin-bottom:10px;}
+  .count{color:var(--text-mute); font-size:11px; margin:2px 0 10px; text-transform:uppercase; letter-spacing:0.03em;}
+
+  .ex-list{display:flex; flex-direction:column; gap:6px; max-height:calc(100vh - 320px); overflow-y:auto; padding-right:4px;}
+  .group-label{font-size:12px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-mute); margin:10px 0 2px; padding-top:6px; border-top:1px solid var(--border-soft);}
+  .group-label:first-child{border-top:none; margin-top:0;}
+
+  .ex-card{
+    background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+    cursor:grab;
+  }
+  .ex-card:active{cursor:grabbing;}
+  .ex-card.dragging{opacity:0.4;}
+  .ex-top{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .ex-name{font-size:13px; font-weight:500;}
+  .badges{display:flex; gap:4px; flex-shrink:0;}
+  .badge{font-size:9px; font-weight:600; padding:2px 5px; border-radius:4px; font-family:'IBM Plex Mono',monospace;}
+  .badge.p1{background:rgba(63,143,209,0.18); color:var(--p1);}
+  .badge.p2{background:rgba(207,68,54,0.18); color:var(--p2);}
+  .ex-meta{font-size:10px; color:var(--text-mute); margin-top:3px; text-transform:uppercase; letter-spacing:0.02em;}
+  .muscle-chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;}
+  .m-chip{font-size:10px; padding:2px 6px; border-radius:10px; color:#0d0d0b; font-weight:600;}
+  .m-chip.secondary{opacity:0.55; font-weight:500;}
+  .quick-add{margin-top:6px;}
+  .quick-add select{width:100%; font-size:11px; padding:4px 6px;}
+
+  /* BUILDER */
+  .builder{padding:16px 20px;}
+  .builder-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .btn{
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    padding:7px 12px; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn.small{padding:3px 8px; font-size:11px;}
+  .days{display:grid; grid-template-columns:repeat(auto-fit, minmax(300px,1fr)); gap:14px;}
+  .day-col{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:120px;}
+  .day-col.day-dragging{opacity:0.35;}
+  .day-col.day-drag-over-left{box-shadow: inset 3px 0 0 var(--accent);}
+  .day-col.day-drag-over-right{box-shadow: inset -3px 0 0 var(--accent);}
+  .day-head{display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:grab;}
+  .day-drag-handle{color:var(--text-mute); font-size:14px; cursor:grab; flex-shrink:0;}
+  .day-reorder{display:flex; gap:2px; flex-shrink:0;}
+  .day-reorder .darrow{cursor:pointer; color:var(--text-mute); font-size:12px; padding:2px 4px;}
+  .day-reorder .darrow:hover{color:var(--accent);}
+  .day-reorder .darrow.disabled{opacity:0.2; pointer-events:none;}
+  .day-title{
+    background:transparent; border:none; color:var(--text); font-family:'Barlow Condensed',sans-serif;
+    font-size:18px; font-weight:600; text-transform:uppercase; letter-spacing:0.02em; width:100%;
+  }
+  .day-title:focus{outline:none; border-bottom:1px solid var(--accent);}
+  .dropzone{
+    min-height:60px; border:1px dashed var(--border); border-radius:8px; padding:6px;
+    display:flex; flex-direction:column; gap:6px; margin-bottom:10px;
+  }
+  .dropzone.over{border-color:var(--accent); background:rgba(207,68,54,0.06);}
+  .empty-hint{color:var(--text-mute); font-size:12px; text-align:center; padding:14px 4px; font-style:italic;}
+  .slot{
+    background:var(--panel2); border:1px solid var(--border-soft); border-radius:6px;
+    padding:8px 10px; display:flex; flex-direction:column; gap:7px; cursor:grab;
+  }
+  .slot.dragging{opacity:0.35;}
+  .slot.drag-over-top{box-shadow: inset 0 2px 0 var(--accent);}
+  .slot.drag-over-bottom{box-shadow: inset 0 -2px 0 var(--accent);}
+  .slot-row1{display:flex; align-items:center; gap:8px;}
+  .drag-handle{color:var(--text-mute); font-size:13px; line-height:1; cursor:grab; flex-shrink:0; letter-spacing:-1px;}
+  .slot-name{
+    flex:1; min-width:0; font-size:12.5px; font-weight:500;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .slot-row2{display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap;}
+  .field{display:flex; flex-direction:column; gap:2px;}
+  .field label{font-size:9px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.03em;}
+  .slot input[type=number]{
+    width:38px; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    border-radius:4px; font-size:11px; padding:3px; text-align:center; font-family:'IBM Plex Mono',monospace;
+  }
+  .slot input[type=text].reps-input{
+    width:50px; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    border-radius:4px; font-size:11px; padding:3px; text-align:center; font-family:'IBM Plex Mono',monospace;
+  }
+  .slot input[type=number].rest-input{
+    width:46px; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    border-radius:4px; font-size:11px; padding:3px; text-align:center; font-family:'IBM Plex Mono',monospace;
+  }
+  .slot-row3{display:flex; flex-direction:column; gap:2px;}
+  .slot-row3 label{font-size:9px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.03em;}
+  .notes-input{
+    width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    border-radius:4px; font-size:11px; padding:5px 7px; font-family:'Inter',sans-serif;
+  }
+  .notes-input:focus{outline:none; border-color:var(--accent);}
+  .notes-input::placeholder{color:var(--text-mute);}
+  .file-actions{display:flex; gap:8px;}
+  input[type=file]{display:none;}
+  .split-name{
+    background:transparent; border:none; border-bottom:1px solid var(--border); color:var(--text);
+    font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:600; text-transform:uppercase;
+    letter-spacing:0.02em; padding:2px 0; margin-bottom:4px; width:100%;
+  }
+  .split-name:focus{outline:none; border-color:var(--accent);}
+  .reorder-btns{display:flex; flex-direction:column; gap:1px; margin-left:auto;}
+  .reorder-btns .arrow{
+    cursor:pointer; color:var(--text-mute); font-size:9px; line-height:1; padding:1px 3px;
+  }
+  .reorder-btns .arrow:hover{color:var(--accent);}
+  .reorder-btns .arrow.disabled{opacity:0.2; pointer-events:none;}
+  .muscle-strip{
+    display:flex; flex-direction:column; width:22px; height:24px; border-radius:3px;
+    overflow:hidden; flex-shrink:0; border:1px solid var(--border-soft);
+  }
+  .muscle-strip .primary-bar{flex:1;}
+  .muscle-strip .secondary-bar{flex:1; display:flex;}
+  .muscle-strip .secondary-bar span{flex:1; height:100%;}
+  .slot .x{cursor:pointer; color:var(--text-mute); font-size:14px; line-height:1; padding:2px 4px; flex-shrink:0;}
+  .slot .x:hover{color:var(--accent);}
+  .library.remove-target{outline:2px dashed var(--accent); outline-offset:-2px;}
+
+  .custom-form{
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    padding:14px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;
+  }
+  .cf-title{font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:600; text-transform:uppercase;}
+  .custom-form label{display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.02em;}
+  .custom-form input[type=text], .custom-form select{
+    background:var(--bg); border:1px solid var(--border); color:var(--text);
+    padding:6px 8px; border-radius:6px; font-size:13px; text-transform:none; font-family:'Inter',sans-serif;
+  }
+  .cf-row{display:flex; gap:10px;}
+  .cf-row label{flex:1;}
+  .cf-muscles{display:flex; gap:16px; flex-wrap:wrap;}
+  .cf-col{flex:1; min-width:150px;}
+  .cf-label{font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.02em; margin-bottom:6px;}
+  .cf-chips{display:flex; flex-wrap:wrap; gap:5px;}
+  .cf-chip{
+    font-size:11px; padding:4px 9px; border-radius:14px; cursor:pointer; user-select:none;
+    border:1px solid var(--border); color:var(--text-dim); background:var(--bg);
+  }
+  .cf-chip.on{color:#0d0d0b; font-weight:600; border-color:transparent;}
+  .cf-secondary-order{font-size:10px; color:var(--text-mute); margin-top:4px; font-family:'IBM Plex Mono',monospace;}
+  .cf-actions{display:flex; gap:8px;}
+  .ex-card-actions{display:flex; align-items:center; gap:4px;}
+  .copy-btn{
+    cursor:pointer; color:var(--text-mute); font-size:12px; padding:2px 5px; border-radius:4px;
+    border:1px solid var(--border);
+  }
+  .copy-btn:hover{color:var(--accent); border-color:var(--accent);}
+  .variant-row{display:flex; align-items:center; gap:8px; margin:6px 0; font-size:11px; color:var(--text-dim);}
+  .variant-row select{
+    flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    padding:5px 6px; border-radius:6px; font-size:11px; font-family:'Inter',sans-serif;
+  }
+
+  .icon-btn{cursor:pointer; color:var(--text-mute); font-size:13px; padding:2px 5px; border-radius:4px; flex-shrink:0;}
+  .icon-btn:hover{color:var(--accent);}
+  .icon-btn.text-btn{font-size:10px; text-transform:uppercase; letter-spacing:0.02em; border:1px dashed var(--border); padding:3px 7px;}
+  .alt-row{display:flex; align-items:center; gap:6px; font-size:10px; color:var(--text-dim);}
+  .alt-label{background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:3px 7px;}
+
+  .placeholder-slot{
+    border:1px dashed var(--border); border-radius:6px; padding:8px 10px;
+    display:flex; flex-direction:column; gap:7px; background:transparent;
+  }
+  .placeholder-role{flex:1; font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.02em;}
+
+  .suggest-panel{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50;
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  .suggest-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    width:min(560px, 100%); max-height:80vh; display:flex; flex-direction:column; padding:16px;
+  }
+  .suggest-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .suggest-head h3{font-size:18px;}
+  .suggest-list{overflow-y:auto; display:flex; flex-direction:column; gap:6px;}
+  .suggest-row{
+    display:flex; align-items:center; gap:8px; background:var(--panel2); border:1px solid var(--border-soft);
+    border-radius:6px; padding:7px 9px;
+  }
+  .suggest-info{flex:1; min-width:0;}
+  .suggest-name{font-size:12.5px; font-weight:500;}
+  .suggest-meta{font-size:10px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.02em;}
+
+  /* INTENSITY */
+  .intensity-title{font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-mute); margin:8px 0 6px; display:flex; justify-content:space-between;}
+  .bar-row{display:grid; grid-template-columns:74px 1fr 30px; align-items:center; gap:6px; margin-bottom:3px;}
+  .bar-label{font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.02em; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .bar-track{background:var(--panel2); border-radius:3px; height:10px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:3px;}
+  .bar-val{font-size:10px; color:var(--text-mute); font-family:'IBM Plex Mono',monospace;}
+
+  .weekly-section{margin-top:24px; padding-top:16px; border-top:1px solid var(--border);}
+  .weekly-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px;}
+  @media (max-width:700px){ .weekly-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Split builder</h1>
+    <p>Search the library, drag exercises into your split, watch the muscle load update live.</p>
+  </div>
+  <div id="syncStatus" style="font-size:11px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.03em;">Loading…</div>
+</header>
+
+<div class="legend" id="legend"></div>
+
+<div class="layout">
+  <div class="library">
+    <div class="controls">
+      <input type="text" id="search" placeholder="Search exercises…">
+      <div class="row">
+        <select id="equipFilter">
+          <option value="">All equipment</option>
+        </select>
+        <select id="patternFilter">
+          <option value="">All patterns</option>
+        </select>
+        <select id="typeFilter">
+          <option value="">Compound + isolation</option>
+          <option value="compound">Compound only</option>
+          <option value="isolation">Isolation only</option>
+          <option value="complex">Complex/carry only</option>
+        </select>
+      </div>
+      <div class="view-toggle">
+        <button class="chip-btn active" id="viewFlat">List view</button>
+        <button class="chip-btn" id="viewGrouped">Group by muscle</button>
+      </div>
+      <div class="row">
+        <button class="btn small" id="loadExercisesBtn">Load exercises file</button>
+        <input type="file" id="exercisesFileInput" accept="application/json">
+        <button class="btn small" id="newExerciseBtn">+ New exercise</button>
+      </div>
+    </div>
+
+    <div id="customForm" class="custom-form" style="display:none;">
+      <div class="cf-title">New exercise</div>
+      <label>Name<input type="text" id="cf_name" placeholder="e.g. Cable Y-Raise"></label>
+      <label>Group (optional — links this as a variant of an existing exercise)
+        <input type="text" id="cf_group" list="groupOptions" placeholder="e.g. Overhead Press">
+      </label>
+      <datalist id="groupOptions"></datalist>
+      <div class="cf-row">
+        <label>Equipment<input type="text" id="cf_equip" list="equipOptions" placeholder="Barbell, Dumbbell…"></label>
+        <label>Pattern
+          <select id="cf_pattern">
+            <option value="push">push</option>
+            <option value="pull">pull</option>
+            <option value="squat">squat</option>
+            <option value="hinge">hinge</option>
+            <option value="isolation">isolation</option>
+          </select>
+        </label>
+        <label>Type
+          <select id="cf_type">
+            <option value="compound">Compound</option>
+            <option value="isolation">Isolation</option>
+            <option value="complex">Complex/carry</option>
+          </select>
+        </label>
+      </div>
+      <datalist id="equipOptions"></datalist>
+      <div class="cf-muscles">
+        <div class="cf-col">
+          <div class="cf-label">Primary muscle(s)</div>
+          <div id="cf_primary" class="cf-chips"></div>
+        </div>
+        <div class="cf-col">
+          <div class="cf-label">Secondary muscle(s) — click in left-to-right order</div>
+          <div id="cf_secondary" class="cf-chips"></div>
+          <div class="cf-secondary-order" id="cf_secondary_order"></div>
+        </div>
+      </div>
+      <div class="cf-actions">
+        <button class="btn small" id="cf_save">Save exercise</button>
+        <button class="btn small" id="cf_cancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="row" id="muscleFilters" style="margin-bottom:8px;"></div>
+    <div class="count" id="resultCount"></div>
+    <div class="ex-list" id="exList"></div>
+  </div>
+
+  <div class="builder">
+    <div class="builder-head">
+      <h2>Your split</h2>
+      <div class="file-actions">
+        <button class="btn" id="templateBtn">Upper/Lower template</button>
+        <button class="btn" id="loadTemplateBtn">Load template file</button>
+        <input type="file" id="templateFileInput" accept="application/json">
+        <button class="btn" id="loadFileBtn">Load program file</button>
+        <input type="file" id="fileInput" accept="application/json">
+        <button class="btn" id="exportBtn">Export this split</button>
+        <button class="btn" id="addDay">+ Add day</button>
+      </div>
+    </div>
+    <input type="text" id="splitName" class="split-name" value="My split">
+    <div class="days" id="days"></div>
+
+    <div class="weekly-section">
+      <h2 style="font-size:20px; margin-bottom:10px;">Weekly muscle load (all days combined)</h2>
+      <div id="weeklyChart"></div>
+    </div>
+  </div>
+</div>
+
+<div class="suggest-panel" id="suggestPanel">
+  <div class="suggest-card">
+    <div class="suggest-head">
+      <h3 id="suggestTitle">Suggestions</h3>
+      <span class="x" id="suggestClose" title="Close">✕</span>
+    </div>
+    <div class="suggest-list" id="suggestList"></div>
+  </div>
+</div>
+
+<script>
+const MUSCLES = [
+  {key:'chest', label:'Chest', color:'#e2574c'},
+  {key:'lats', label:'Lats/back', color:'#3f8fd1'},
+  {key:'traps', label:'Traps', color:'#a9825c'},
+  {key:'frontDelts', label:'Front delts', color:'#e8ab35'},
+  {key:'sideDelts', label:'Side delts', color:'#e8772a'},
+  {key:'rearDelts', label:'Rear delts', color:'#e06fa0'},
+  {key:'biceps', label:'Biceps', color:'#8f80e8'},
+  {key:'triceps', label:'Triceps', color:'#2ba57e'},
+  {key:'quads', label:'Quads', color:'#7cb238'},
+  {key:'hamstrings', label:'Hamstrings', color:'#c14a68'},
+  {key:'glutes', label:'Glutes', color:'#b0562f'},
+  {key:'calves', label:'Calves', color:'#4fa6a1'},
+  {key:'abs', label:'Abs', color:'#8f8d85'},
+];
+const MUSCLE_MAP = Object.fromEntries(MUSCLES.map(m=>[m.key,m]));
+
+const EX = [
+  {id:'bb_bench', name:'Barbell bench press', equip:'Barbell', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps','frontDelts'], custom:false, group:'Bench Press'},
+  {id:'bo_row', name:'Bent over row (barbell)', equip:'Barbell', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false, group:'Row'},
+  {id:'tbar_row', name:'T-bar row', equip:'Machine', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false, group:'Row'},
+  {id:'db_shoulder_press', name:'Dumbbell shoulder press', equip:'Dumbbell', pattern:'push', type:'compound', primary:['frontDelts'], secondary:['sideDelts','triceps'], custom:false, group:'Overhead Press'},
+  {id:'bb_ohp', name:'Barbell overhead press', equip:'Barbell', pattern:'push', type:'compound', primary:['frontDelts'], secondary:['sideDelts','triceps'], custom:false, group:'Overhead Press'},
+  {id:'seated_shoulder_press', name:'Seated shoulder press (machine)', equip:'Machine', pattern:'push', type:'compound', primary:['frontDelts'], secondary:['sideDelts','triceps'], custom:false, group:'Overhead Press'},
+  {id:'lat_pulldown', name:'Lat pulldown (cable)', equip:'Cable', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps'], custom:false, group:'Lat Pulldown'},
+  {id:'neutral_pulldown', name:'Neutral grip lat pulldown', equip:'Cable', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps'], custom:false, group:'Lat Pulldown'},
+  {id:'straight_arm_pulldown', name:'Straight arm lat pulldown', equip:'Cable', pattern:'isolation', type:'isolation', primary:['lats'], secondary:[], custom:false},
+  {id:'low_cable_fly', name:'Low cable fly crossovers', equip:'Cable', pattern:'isolation', type:'isolation', primary:['chest'], secondary:[], custom:false, group:'Chest Fly'},
+  {id:'db_curl', name:'Dumbbell bicep curl', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false, group:'Bicep Curl'},
+  {id:'cable_curl', name:'Cable curl', equip:'Cable', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false, group:'Bicep Curl'},
+  {id:'incline_db_curl', name:'Incline dumbbell curl', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'ez_curl', name:'EZ bar bicep curl', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false, group:'Bicep Curl'},
+  {id:'db_tri_ext', name:'Dumbbell triceps extension', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false},
+  {id:'cable_pressdown', name:'Cable triceps pressdown', equip:'Cable', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false, group:'Triceps Pushdown'},
+  {id:'db_kickback', name:'Dumbbell triceps kickback', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false},
+  {id:'ez_skullcrusher', name:'EZ bar skullcrusher', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false},
+  {id:'face_pull', name:'Face pull (cable)', equip:'Cable', pattern:'isolation', type:'isolation', primary:['rearDelts'], secondary:['traps'], custom:false},
+  {id:'db_lateral_raise', name:'Dumbbell lateral raise', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['sideDelts'], secondary:[], custom:false, group:'Lateral Raise'},
+  {id:'upright_row', name:'Barbell upright row', equip:'Barbell', pattern:'pull', type:'compound', primary:['sideDelts'], secondary:['traps','biceps'], custom:false},
+  {id:'upright_row_cable', name:'Upright row (cable)', equip:'Cable', pattern:'pull', type:'compound', primary:['sideDelts'], secondary:['traps','biceps'], custom:false},
+  {id:'pull_up', name:'Pull up', equip:'Bodyweight', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps'], custom:false},
+  {id:'assisted_chinup', name:'Assisted chin-up', equip:'Machine', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps'], custom:false},
+  {id:'db_row', name:'Dumbbell row (single arm)', equip:'Dumbbell', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false},
+  {id:'incline_db_bench', name:'Incline dumbbell bench press', equip:'Dumbbell', pattern:'push', type:'compound', primary:['chest'], secondary:['frontDelts','triceps'], custom:false, group:'Incline Bench Press'},
+  {id:'incline_bb_bench', name:'Incline bench press (barbell)', equip:'Barbell', pattern:'push', type:'compound', primary:['chest'], secondary:['frontDelts','triceps'], custom:false, group:'Incline Bench Press'},
+  {id:'db_bench', name:'Dumbbell bench press (flat)', equip:'Dumbbell', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps','frontDelts'], custom:false, group:'Bench Press'},
+  {id:'push_up', name:'Push up', equip:'Bodyweight', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps','frontDelts'], custom:false},
+  {id:'bb_squat', name:'Barbell back squat', equip:'Barbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false, group:'Squat'},
+  {id:'glute_ham_raise', name:'Glute ham raise', equip:'Machine', pattern:'hinge', type:'compound', primary:['hamstrings'], secondary:['glutes'], custom:false},
+  {id:'db_lunge', name:'Dumbbell walking lunge', equip:'Dumbbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'lying_leg_curl', name:'Lying leg curl (machine)', equip:'Machine', pattern:'isolation', type:'isolation', primary:['hamstrings'], secondary:[], custom:false, group:'Leg Curl'},
+  {id:'standing_calf_smith', name:'Standing calf raise (smith)', equip:'Smith Machine', pattern:'isolation', type:'isolation', primary:['calves'], secondary:[], custom:false, group:'Standing Calf Raise'},
+  {id:'leg_press', name:'Leg press (machine)', equip:'Machine', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'rdl', name:'Romanian deadlift (barbell)', equip:'Barbell', pattern:'hinge', type:'compound', primary:['hamstrings','glutes'], secondary:['traps'], custom:false},
+  {id:'leg_extension', name:'Leg extension (machine)', equip:'Machine', pattern:'isolation', type:'isolation', primary:['quads'], secondary:[], custom:false},
+  {id:'seated_calf', name:'Seated calf raise', equip:'Machine', pattern:'isolation', type:'isolation', primary:['calves'], secondary:[], custom:false},
+  {id:'cable_crunch', name:'Cable crunch', equip:'Cable', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'leg_press_calf', name:'Leg press calf raise', equip:'Machine', pattern:'isolation', type:'isolation', primary:['calves'], secondary:[], custom:false},
+  {id:'hack_squat', name:'Hack squat (machine)', equip:'Machine', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false, group:'Squat'},
+  {id:'deadlift', name:'Conventional deadlift', equip:'Barbell', pattern:'hinge', type:'compound', primary:['hamstrings','glutes'], secondary:['lats','traps'], custom:false},
+  {id:'arnold_press', name:'Arnold press (dumbbell)', equip:'Dumbbell', pattern:'push', type:'compound', primary:['frontDelts'], secondary:['sideDelts','triceps'], custom:false, group:'Overhead Press'},
+  {id:'cable_lateral_raise', name:'Cable lateral raise', equip:'Cable', pattern:'isolation', type:'isolation', primary:['sideDelts'], secondary:[], custom:false, group:'Lateral Raise'},
+  {id:'rear_delt_fly', name:'Reverse pec deck / rear delt fly', equip:'Machine', pattern:'isolation', type:'isolation', primary:['rearDelts'], secondary:[], custom:false},
+  {id:'db_chest_fly', name:'Dumbbell chest fly', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['chest'], secondary:[], custom:false, group:'Chest Fly'},
+  {id:'decline_bench', name:'Decline barbell bench press', equip:'Barbell', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps'], custom:false},
+  {id:'dips', name:'Dips (chest-focused)', equip:'Bodyweight', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps'], custom:false},
+  {id:'close_grip_bench', name:'Close grip bench press', equip:'Barbell', pattern:'push', type:'compound', primary:['triceps'], secondary:['chest'], custom:false},
+  {id:'seated_cable_row', name:'Seated cable row', equip:'Cable', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false, group:'Row'},
+  {id:'shrug', name:'Barbell shrug', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['traps'], secondary:[], custom:false},
+  {id:'hip_thrust', name:'Barbell hip thrust', equip:'Barbell', pattern:'hinge', type:'isolation', primary:['glutes'], secondary:['hamstrings'], custom:false},
+  {id:'bulgarian_split_squat', name:'Bulgarian split squat', equip:'Dumbbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'goblet_squat', name:'Goblet squat', equip:'Dumbbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'front_squat', name:'Front squat (barbell)', equip:'Barbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false, group:'Squat'},
+  {id:'seated_leg_curl', name:'Seated leg curl (machine)', equip:'Machine', pattern:'isolation', type:'isolation', primary:['hamstrings'], secondary:[], custom:false, group:'Leg Curl'},
+  {id:'ab_wheel', name:'Ab wheel rollout', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'hanging_leg_raise', name:'Hanging leg raise', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'plank', name:'Plank', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'preacher_curl', name:'Preacher curl', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'hammer_curl', name:'Hammer curl (dumbbell)', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'overhead_tri_ext', name:'Overhead cable triceps extension', equip:'Cable', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false},
+  {id:'chest_supported_row', name:'Chest supported row (dumbbell)', equip:'Dumbbell', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false, group:'Row'},
+  {id:'db_pullover', name:'Dumbbell pullover', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['lats'], secondary:['chest'], custom:false},
+  {id:'standing_calf_machine', name:'Standing calf raise (machine)', equip:'Machine', pattern:'isolation', type:'isolation', primary:['calves'], secondary:[], custom:false, group:'Standing Calf Raise'},
+  {id:'cable_chest_press', name:'Cable Chest Press', equip:'Cable', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps','frontDelts'], custom:false, group:'Bench Press'},
+  {id:'machine_chest_press_neutral_grip', name:'Machine Chest Press (Neutral Grip)', equip:'Machine', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps','frontDelts'], custom:false, group:'Bench Press'},
+  {id:'single_arm_cable_fly', name:'Single Arm Cable Fly', equip:'Cable', pattern:'isolation', type:'isolation', primary:['chest'], secondary:[], custom:false},
+  {id:'pec_deck_fly', name:'Pec Deck Fly', equip:'Machine', pattern:'isolation', type:'isolation', primary:['chest'], secondary:[], custom:false, group:'Chest Fly'},
+  {id:'floor_press_barbell', name:'Floor Press (Barbell)', equip:'Barbell', pattern:'push', type:'compound', primary:['chest'], secondary:['triceps'], custom:false, group:'Bench Press'},
+  {id:'svend_press', name:'Svend Press', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['chest'], secondary:[], custom:false},
+  {id:'incline_cable_fly', name:'Incline Cable Fly', equip:'Cable', pattern:'isolation', type:'isolation', primary:['chest'], secondary:[], custom:false},
+  {id:'incline_machine_press', name:'Incline Machine Press', equip:'Machine', pattern:'push', type:'compound', primary:['chest'], secondary:['frontDelts','triceps'], custom:false, group:'Incline Bench Press'},
+  {id:'pendlay_row', name:'Pendlay Row', equip:'Barbell', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false},
+  {id:'meadows_row', name:'Meadows Row', equip:'Barbell', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps'], custom:false},
+  {id:'rack_pull', name:'Rack Pull', equip:'Barbell', pattern:'hinge', type:'compound', primary:['hamstrings','glutes'], secondary:['lats','traps'], custom:false},
+  {id:'inverted_row', name:'Inverted Row', equip:'Bodyweight', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false},
+  {id:'cable_pullover', name:'Cable Pullover', equip:'Cable', pattern:'isolation', type:'isolation', primary:['lats'], secondary:['chest'], custom:false},
+  {id:'landmine_row', name:'Landmine Row', equip:'Barbell', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false},
+  {id:'kroc_row_dumbbell', name:'Kroc Row (Dumbbell)', equip:'Dumbbell', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false},
+  {id:'chest_supported_machine_row', name:'Chest Supported Machine Row', equip:'Machine', pattern:'pull', type:'compound', primary:['lats'], secondary:['biceps','traps'], custom:false},
+  {id:'cable_front_raise', name:'Cable Front Raise', equip:'Cable', pattern:'isolation', type:'isolation', primary:['frontDelts'], secondary:[], custom:false},
+  {id:'machine_lateral_raise', name:'Machine Lateral Raise', equip:'Machine', pattern:'isolation', type:'isolation', primary:['sideDelts'], secondary:[], custom:false, group:'Lateral Raise'},
+  {id:'plate_front_raise', name:'Plate Front Raise', equip:'Other', pattern:'isolation', type:'isolation', primary:['frontDelts'], secondary:[], custom:false},
+  {id:'bradford_press', name:'Bradford Press', equip:'Barbell', pattern:'push', type:'compound', primary:['frontDelts'], secondary:['sideDelts','triceps'], custom:false},
+  {id:'cuban_press', name:'Cuban Press', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['sideDelts'], secondary:['rearDelts'], custom:false},
+  {id:'z_press_seated_floor_press', name:'Z Press (Seated Floor Press)', equip:'Barbell', pattern:'push', type:'compound', primary:['frontDelts'], secondary:['sideDelts','triceps'], custom:false},
+  {id:'cable_rear_delt_fly', name:'Cable Rear Delt Fly', equip:'Cable', pattern:'isolation', type:'isolation', primary:['rearDelts'], secondary:[], custom:false},
+  {id:'behind_the_neck_press', name:'Behind the Neck Press', equip:'Barbell', pattern:'push', type:'compound', primary:['sideDelts'], secondary:['triceps'], custom:false},
+  {id:'spider_curl', name:'Spider Curl', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'zottman_curl', name:'Zottman Curl', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'cable_rope_curl', name:'Cable Rope Curl', equip:'Cable', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'drag_curl', name:'Drag Curl', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'waiter_curl', name:'Waiter Curl', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'21s_bicep_curl', name:'21s Bicep Curl', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'reverse_curl', name:'Reverse Curl', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['biceps'], secondary:[], custom:false},
+  {id:'jm_press', name:'JM Press', equip:'Barbell', pattern:'push', type:'compound', primary:['triceps'], secondary:['chest'], custom:false},
+  {id:'tate_press', name:'Tate Press', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false},
+  {id:'diamond_push_up', name:'Diamond Push Up', equip:'Bodyweight', pattern:'push', type:'compound', primary:['triceps'], secondary:['chest'], custom:false},
+  {id:'rope_triceps_pushdown', name:'Rope Triceps Pushdown', equip:'Cable', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false, group:'Triceps Pushdown'},
+  {id:'triceps_dip_machine', name:'Triceps Dip Machine', equip:'Machine', pattern:'push', type:'compound', primary:['triceps'], secondary:['chest'], custom:false},
+  {id:'single_arm_triceps_pushdown', name:'Single Arm Triceps Pushdown', equip:'Cable', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false},
+  {id:'dumbbell_skullcrusher', name:'Dumbbell Skullcrusher', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['triceps'], secondary:[], custom:false},
+  {id:'sissy_squat', name:'Sissy Squat', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['quads'], secondary:[], custom:false},
+  {id:'narrow_stance_leg_press', name:'Narrow Stance Leg Press', equip:'Machine', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'barbell_walking_lunge', name:'Barbell Walking Lunge', equip:'Barbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'dumbbell_step_up', name:'Dumbbell Step Up', equip:'Dumbbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'box_squat_barbell', name:'Box Squat (Barbell)', equip:'Barbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false, group:'Squat'},
+  {id:'zercher_squat', name:'Zercher Squat', equip:'Barbell', pattern:'squat', type:'compound', primary:['quads'], secondary:['glutes'], custom:false},
+  {id:'sissy_squat_machine', name:'Sissy Squat Machine', equip:'Machine', pattern:'isolation', type:'isolation', primary:['quads'], secondary:[], custom:false},
+  {id:'single_leg_romanian_deadlift_dumbbell', name:'Single Leg Romanian Deadlift (Dumbbell)', equip:'Dumbbell', pattern:'hinge', type:'compound', primary:['hamstrings','glutes'], secondary:[], custom:false},
+  {id:'cable_pull_through', name:'Cable Pull Through', equip:'Cable', pattern:'hinge', type:'compound', primary:['glutes'], secondary:['hamstrings'], custom:false},
+  {id:'reverse_hyperextension', name:'Reverse Hyperextension', equip:'Machine', pattern:'isolation', type:'isolation', primary:['glutes'], secondary:['hamstrings'], custom:false},
+  {id:'good_morning_barbell', name:'Good Morning (Barbell)', equip:'Barbell', pattern:'hinge', type:'compound', primary:['hamstrings'], secondary:['glutes'], custom:false},
+  {id:'kettlebell_swing', name:'Kettlebell Swing', equip:'Kettlebell', pattern:'hinge', type:'compound', primary:['glutes'], secondary:['hamstrings'], custom:false},
+  {id:'barbell_glute_bridge', name:'Barbell Glute Bridge', equip:'Barbell', pattern:'hinge', type:'isolation', primary:['glutes'], secondary:['hamstrings'], custom:false},
+  {id:'cable_glute_kickback', name:'Cable Glute Kickback', equip:'Cable', pattern:'isolation', type:'isolation', primary:['glutes'], secondary:[], custom:false},
+  {id:'frog_pump', name:'Frog Pump', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['glutes'], secondary:[], custom:false},
+  {id:'45_degree_hyperextension', name:'45-Degree Hyperextension', equip:'Machine', pattern:'isolation', type:'isolation', primary:['hamstrings'], secondary:['glutes'], custom:false},
+  {id:'nordic_hamstring_curl', name:'Nordic Hamstring Curl', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['hamstrings'], secondary:[], custom:false},
+  {id:'donkey_calf_raise', name:'Donkey Calf Raise', equip:'Machine', pattern:'isolation', type:'isolation', primary:['calves'], secondary:[], custom:false},
+  {id:'single_leg_calf_raise_dumbbell', name:'Single Leg Calf Raise (Dumbbell)', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['calves'], secondary:[], custom:false},
+  {id:'pallof_press', name:'Pallof Press', equip:'Cable', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'dead_bug', name:'Dead Bug', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'side_plank', name:'Side Plank', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'weighted_decline_sit_up', name:'Weighted Decline Sit Up', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'machine_weighted_crunch', name:'Machine Weighted Crunch', equip:'Machine', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'toes_to_bar', name:'Toes to Bar', equip:'Bodyweight', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'cable_wood_chopper', name:'Cable Wood Chopper', equip:'Cable', pattern:'isolation', type:'isolation', primary:['abs'], secondary:[], custom:false},
+  {id:'farmers_carry', name:'Farmers Carry', equip:'Dumbbell', pattern:'isolation', type:'complex', primary:['traps'], secondary:['abs'], custom:false},
+  {id:'snatch_grip_shrug', name:'Snatch Grip Shrug', equip:'Barbell', pattern:'isolation', type:'isolation', primary:['traps'], secondary:[], custom:false},
+  {id:'dumbbell_shrug', name:'Dumbbell Shrug', equip:'Dumbbell', pattern:'isolation', type:'isolation', primary:['traps'], secondary:[], custom:false},
+  {id:'trap_bar_deadlift', name:'Trap Bar Deadlift', equip:'Trap Bar', pattern:'hinge', type:'compound', primary:['hamstrings','glutes'], secondary:['quads','traps'], custom:false},
+  {id:'clean_and_press', name:'Clean and Press', equip:'Barbell', pattern:'push', type:'complex', primary:['frontDelts'], secondary:['quads','traps'], custom:false},
+  {id:'turkish_get_up', name:'Turkish Get Up', equip:'Kettlebell', pattern:'isolation', type:'complex', primary:['abs'], secondary:['frontDelts'], custom:false},
+];
+const EX_MAP = Object.fromEntries(EX.map(e=>[e.id,e]));
+
+let state = {
+  search: '',
+  muscles: new Set(),
+  equip: '',
+  pattern: '',
+  type: '',
+  view: 'flat',
+  expanded: new Set(),
+  name: 'My split',
+  days: [
+    {name:'Upper 1', items:[]},
+    {name:'Lower 1', items:[]},
+    {name:'Upper 2', items:[]},
+    {name:'Lower 2', items:[]},
+  ],
+};
+
+/* ---------- Firebase persistence ---------- */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyABb0GWm4Hg4-NVsk_l7pTAwj30P8zNfLE",
+  authDomain: "sport-aec25.firebaseapp.com",
+  projectId: "sport-aec25",
+  storageBucket: "sport-aec25.firebasestorage.app",
+  messagingSenderId: "933674368374",
+  appId: "1:933674368374:web:65726be73568dc3605ce57",
+  measurementId: "G-T5W4B6WH8G"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const splitDocRef = db.collection('splits').doc('default');
+
+let isLoading = true;
+let saveTimer = null;
+
+function setSyncStatus(text){
+  const el = document.getElementById('syncStatus');
+  if(el) el.textContent = text;
+}
+
+function scheduleSave(){
+  if(isLoading) return;
+  setSyncStatus('Saving…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveToFirestore, 800);
+}
+
+async function saveToFirestore(){
+  try{
+    const usedExIds = new Set();
+    state.days.forEach(d=>d.items.forEach(it=>{
+      if(it.placeholder) return;
+      if(it.exId) usedExIds.add(it.exId);
+      if(it.altExId) usedExIds.add(it.altExId);
+    }));
+    const customExercises = [...usedExIds].map(id=>EX_MAP[id]).filter(ex=>ex && ex.custom);
+    const payload = {name: state.name, days: state.days, customExercises};
+    await splitDocRef.set({
+      data: payload,
+      updated_at: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    setSyncStatus('Saved ✓');
+  }catch(err){
+    console.error('Save to Firestore failed:', err);
+    setSyncStatus('Save failed — check connection');
+  }
+}
+
+async function loadFromFirestore(){
+  try{
+    const doc = await splitDocRef.get();
+    if(doc.exists && doc.data() && doc.data().data){
+      const payload = doc.data().data;
+      if(Array.isArray(payload.customExercises)){
+        payload.customExercises.forEach(raw=>{
+          if(!raw || !raw.id || !raw.name || EX_MAP[raw.id]) return;
+          registerExercise(raw);
+        });
+      }
+      if(payload.name) state.name = payload.name;
+      if(Array.isArray(payload.days)) state.days = payload.days;
+      setSyncStatus('Loaded from cloud');
+    } else {
+      setSyncStatus('No saved split yet — starting fresh');
+    }
+  }catch(err){
+    console.error('Load from Firestore failed:', err);
+    setSyncStatus('Could not load — check connection');
+  }finally{
+    isLoading = false;
+  }
+}
+
+function muscleChip(key, secondary){
+  const m = MUSCLE_MAP[key];
+  return `<span class="m-chip${secondary?' secondary':''}" style="background:${m.color}">${m.label}</span>`;
+}
+
+function muscleStripHTML(ex){
+  const mainKey = ex.primary[0];
+  const mainColor = mainKey ? MUSCLE_MAP[mainKey].color : '#33322d';
+  const secondaryHTML = ex.secondary.length
+    ? `<div class="secondary-bar">${ex.secondary.map(k=>`<span style="background:${MUSCLE_MAP[k].color}"></span>`).join('')}</div>`
+    : '';
+  const title = `Main: ${mainKey ? MUSCLE_MAP[mainKey].label : '—'}` +
+    (ex.secondary.length ? ` · Secondary (L→R): ${ex.secondary.map(k=>MUSCLE_MAP[k].label).join(', ')}` : '');
+  return `<div class="muscle-strip" title="${title}">
+    <div class="primary-bar" style="background:${mainColor}"></div>
+    ${secondaryHTML}
+  </div>`;
+}
+
+function renderLegend(){
+  document.getElementById('legend').innerHTML = MUSCLES.map(m=>
+    `<span><i style="background:${m.color}"></i>${m.label}</span>`
+  ).join('');
+}
+
+function renderFilters(){
+  const muscleFilters = document.getElementById('muscleFilters');
+  muscleFilters.innerHTML = MUSCLES.map(m=>
+    `<button class="chip-btn${state.muscles.has(m.key)?' active':''}" data-muscle="${m.key}" style="${state.muscles.has(m.key)?`background:${m.color};border-color:${m.color};color:#0d0d0b`:''}">${m.label}</button>`
+  ).join('');
+  muscleFilters.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const k = b.dataset.muscle;
+    state.muscles.has(k) ? state.muscles.delete(k) : state.muscles.add(k);
+    renderFilters(); renderLibrary();
+  });
+
+  const equipSel = document.getElementById('equipFilter');
+  const currentEquip = equipSel.value;
+  const equips = [...new Set(EX.map(e=>e.equip))].sort();
+  equipSel.innerHTML = `<option value="">All equipment</option>` + equips.map(eq=>`<option value="${eq}">${eq}</option>`).join('');
+  equipSel.value = equips.includes(currentEquip) ? currentEquip : '';
+
+  const patSel = document.getElementById('patternFilter');
+  const currentPat = patSel.value;
+  const pats = [...new Set(EX.map(e=>e.pattern))].sort();
+  patSel.innerHTML = `<option value="">All patterns</option>` + pats.map(p=>`<option value="${p}">${p[0].toUpperCase()+p.slice(1)}</option>`).join('');
+  patSel.value = pats.includes(currentPat) ? currentPat : '';
+
+  const equipOptions = document.getElementById('equipOptions');
+  if(equipOptions) equipOptions.innerHTML = equips.map(eq=>`<option value="${eq}">`).join('');
+
+  const groupOptions = document.getElementById('groupOptions');
+  if(groupOptions){
+    const groups = [...new Set(EX.map(e=>e.group).filter(Boolean))].sort();
+    groupOptions.innerHTML = groups.map(g=>`<option value="${g}">`).join('');
+  }
+}
+
+function matchesFilters(ex){
+  if(state.search && !ex.name.toLowerCase().includes(state.search.toLowerCase())) return false;
+  if(state.equip && ex.equip !== state.equip) return false;
+  if(state.pattern && ex.pattern !== state.pattern) return false;
+  if(state.type && ex.type !== state.type) return false;
+  if(state.muscles.size){
+    const all = [...ex.primary, ...ex.secondary];
+    if(![...state.muscles].some(m=>all.includes(m))) return false;
+  }
+  return true;
+}
+
+function exCardHTML(ex){
+  const dayOptions = state.days.map((d,i)=>`<option value="${i}">${d.name || 'Day '+(i+1)}</option>`).join('');
+  return `
+  <div class="ex-card" draggable="true" data-id="${ex.id}">
+    <div class="ex-top">
+      <div>
+        <div class="ex-name">${ex.name}</div>
+        <div class="ex-meta">${ex.equip} · ${ex.pattern} · ${ex.type}${ex.custom?' · custom':''}</div>
+      </div>
+      <div class="ex-card-actions">
+        ${muscleStripHTML(ex)}
+        <span class="copy-btn" data-copy-id="${ex.id}" title="Copy as new exercise (template)">⎘</span>
+      </div>
+    </div>
+    <div class="muscle-chips">
+      ${ex.primary.map(k=>muscleChip(k,false)).join('')}
+      ${ex.secondary.map(k=>muscleChip(k,true)).join('')}
+    </div>
+    <div class="quick-add">
+      <select data-add-id="${ex.id}">
+        <option value="">Add to day…</option>
+        ${dayOptions}
+      </select>
+    </div>
+  </div>`;
+}
+
+function groupCardHTML(groupName, variants){
+  const first = variants[0];
+  const dayOptions = state.days.map((d,i)=>`<option value="${i}">${d.name || 'Day '+(i+1)}</option>`).join('');
+  const variantOptions = variants.map(v=>`<option value="${v.id}">${v.equip}</option>`).join('');
+  return `
+  <div class="ex-card group-card" draggable="true" data-group="${groupName}">
+    <div class="ex-top">
+      <div>
+        <div class="ex-name">${groupName}</div>
+        <div class="ex-meta">${variants.length} variants · ${first.pattern} · ${first.type}</div>
+      </div>
+      <div class="ex-card-actions">
+        ${muscleStripHTML(first)}
+        <span class="copy-btn" data-copy-group="true" title="Copy selected variant as a new exercise template">⎘</span>
+      </div>
+    </div>
+    <div class="muscle-chips">
+      ${first.primary.map(k=>muscleChip(k,false)).join('')}
+      ${first.secondary.map(k=>muscleChip(k,true)).join('')}
+    </div>
+    <div class="variant-row">
+      <label>Equipment</label>
+      <select class="variant-select" data-group="${groupName}">${variantOptions}</select>
+    </div>
+    <div class="quick-add">
+      <select data-add-group="${groupName}">
+        <option value="">Add to day…</option>
+        ${dayOptions}
+      </select>
+    </div>
+  </div>`;
+}
+
+function buildDisplayItems(list){
+  const seenGroups = new Set();
+  const items = [];
+  list.forEach(ex=>{
+    if(ex.group){
+      if(seenGroups.has(ex.group)) return;
+      seenGroups.add(ex.group);
+      const variants = list.filter(e=>e.group === ex.group);
+      items.push({kind:'group', name: ex.group, variants});
+    } else {
+      items.push({kind:'single', ex});
+    }
+  });
+  return items;
+}
+
+function renderCard(item){
+  return item.kind === 'group' ? groupCardHTML(item.name, item.variants) : exCardHTML(item.ex);
+}
+
+function renderLibrary(){
+  const list = EX.filter(matchesFilters);
+  document.getElementById('resultCount').textContent = `${list.length} exercise${list.length===1?'':'s'}`;
+  const container = document.getElementById('exList');
+
+  if(state.view === 'flat'){
+    const items = buildDisplayItems(list);
+    container.innerHTML = items.map(renderCard).join('') || `<div class="empty-hint">No exercises match these filters.</div>`;
+  } else {
+    let html = '';
+    MUSCLES.forEach(m=>{
+      const subset = list.filter(e=>e.primary.includes(m.key));
+      if(!subset.length) return;
+      const items = buildDisplayItems(subset);
+      html += `<div class="group-label">${m.label}</div>`;
+      html += items.map(renderCard).join('');
+    });
+    container.innerHTML = html || `<div class="empty-hint">No exercises match these filters.</div>`;
+  }
+
+  container.querySelectorAll('.ex-card').forEach(card=>{
+    card.addEventListener('dragstart', e=>{
+      const exId = card.classList.contains('group-card')
+        ? card.querySelector('.variant-select').value
+        : card.dataset.id;
+      e.dataTransfer.setData('text/plain', JSON.stringify({type:'add', exId}));
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+  });
+  container.querySelectorAll('[data-add-id]').forEach(sel=>{
+    sel.addEventListener('change', e=>{
+      const dayIdx = e.target.value;
+      if(dayIdx === '') return;
+      addToDay(parseInt(dayIdx), e.target.dataset.addId);
+      e.target.value = '';
+    });
+  });
+  container.querySelectorAll('[data-add-group]').forEach(sel=>{
+    sel.addEventListener('change', e=>{
+      const dayIdx = e.target.value;
+      if(dayIdx === '') return;
+      const card = e.target.closest('.group-card');
+      const variantId = card.querySelector('.variant-select').value;
+      addToDay(parseInt(dayIdx), variantId);
+      e.target.value = '';
+    });
+  });
+  container.querySelectorAll('[data-copy-id]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      openCustomForm(EX_MAP[btn.dataset.copyId]);
+    });
+  });
+  container.querySelectorAll('[data-copy-group]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const card = e.target.closest('.group-card');
+      const variantId = card.querySelector('.variant-select').value;
+      openCustomForm(EX_MAP[variantId]);
+    });
+  });
+}
+
+const libraryPanel = document.querySelector('.library');
+libraryPanel.addEventListener('dragover', e=>{
+  e.preventDefault();
+  libraryPanel.classList.add('remove-target');
+});
+libraryPanel.addEventListener('dragleave', e=>{
+  if(!libraryPanel.contains(e.relatedTarget)) libraryPanel.classList.remove('remove-target');
+});
+libraryPanel.addEventListener('drop', e=>{
+  e.preventDefault();
+  libraryPanel.classList.remove('remove-target');
+  let data;
+  try{ data = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
+  if(data && data.type === 'move'){
+    state.days[data.day].items.splice(data.index, 1);
+    renderDays();
+  }
+});
+
+function addToDay(dayIdx, exId){
+  state.days[dayIdx].items.push({exId, sets:3, reps:'8-12', rest:90, notes:'', altExId:null});
+  renderDays();
+}
+
+function computeMuscleScores(items){
+  const scores = {};
+  items.forEach(it=>{
+    const ex = EX_MAP[it.exId];
+    if(!ex) return;
+    ex.primary.forEach(k=> scores[k] = (scores[k]||0) + it.sets*1.0);
+    ex.secondary.forEach(k=> scores[k] = (scores[k]||0) + it.sets*0.5);
+  });
+  return scores;
+}
+
+function barsHTML(scores){
+  const entries = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length) return `<div class="empty-hint" style="text-align:left; padding:4px 0;">No load yet.</div>`;
+  const max = Math.max(...entries.map(e=>e[1]));
+  return entries.map(([key,val])=>{
+    const m = MUSCLE_MAP[key];
+    const pct = (val/max*100).toFixed(0);
+    return `<div class="bar-row">
+      <div class="bar-label">${m.label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${m.color}"></div></div>
+      <div class="bar-val">${val.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+}
+
+function dayHTML(day, idx, totalDays){
+  const itemsHTML = day.items.map((it,i)=>{
+    if(it.placeholder){
+      return `<div class="slot placeholder-slot" draggable="true" data-day="${idx}" data-item="${i}">
+        <div class="slot-row1">
+          <span class="drag-handle" title="Drag to reorder">⠿</span>
+          <div class="placeholder-role">${it.role}</div>
+          <span class="x" data-day="${idx}" data-item="${i}" title="Remove this placeholder">✕</span>
+        </div>
+        <div class="slot-row2">
+          <div class="field"><label>Sets</label><input type="number" draggable="false" min="1" max="10" value="${it.sets ?? 3}" data-day="${idx}" data-item="${i}" class="ph-sets-input"></div>
+          <div class="field"><label>Reps</label><input type="text" draggable="false" value="${it.reps || '8-12'}" placeholder="8-12" data-day="${idx}" data-item="${i}" class="ph-reps-input"></div>
+          <div class="field"><label>Rest (s)</label><input type="number" draggable="false" min="0" step="15" value="${it.rest ?? 90}" data-day="${idx}" data-item="${i}" class="ph-rest-input"></div>
+        </div>
+        <button class="btn small" data-day="${idx}" data-item="${i}" data-action="fill-placeholder">+ Choose exercise</button>
+      </div>`;
+    }
+    const ex = EX_MAP[it.exId];
+    const altEx = it.altExId ? EX_MAP[it.altExId] : null;
+    const altRowHTML = altEx
+      ? `<span class="alt-label">Alt: ${altEx.name}</span>
+         <span class="icon-btn" data-day="${idx}" data-item="${i}" data-action="swap-alt" title="Swap to alternative">🔁</span>
+         <span class="icon-btn" data-day="${idx}" data-item="${i}" data-action="clear-alt" title="Remove alternative">✕</span>`
+      : `<span class="icon-btn text-btn" data-day="${idx}" data-item="${i}" data-action="set-alt" title="Set an alternative (e.g. if a machine is taken)">+ Alternative</span>`;
+    return `<div class="slot" draggable="true" data-day="${idx}" data-item="${i}">
+      <div class="slot-row1">
+        <span class="drag-handle" title="Drag to reorder or drag out to library to remove">⠿</span>
+        <div class="slot-name" title="${ex.name}">${ex.name}</div>
+        ${muscleStripHTML(ex)}
+        <span class="icon-btn" data-day="${idx}" data-item="${i}" data-action="replace" title="Replace with an alternative exercise">⇄</span>
+        <span class="x" data-day="${idx}" data-item="${i}" title="Remove">✕</span>
+      </div>
+      <div class="slot-row2">
+        <div class="field"><label>Sets</label><input type="number" draggable="false" min="1" max="10" value="${it.sets}" data-day="${idx}" data-item="${i}" class="sets-input"></div>
+        <div class="field"><label>Reps</label><input type="text" draggable="false" value="${it.reps || ''}" placeholder="8-12" data-day="${idx}" data-item="${i}" class="reps-input"></div>
+        <div class="field"><label>Rest (s)</label><input type="number" draggable="false" min="0" step="15" value="${it.rest ?? 90}" data-day="${idx}" data-item="${i}" class="rest-input"></div>
+        <div class="reorder-btns">
+          <span class="arrow${i===0?' disabled':''}" data-day="${idx}" data-item="${i}" data-dir="up" title="Move up">▲</span>
+          <span class="arrow${i===day.items.length-1?' disabled':''}" data-day="${idx}" data-item="${i}" data-dir="down" title="Move down">▼</span>
+        </div>
+      </div>
+      <div class="slot-row3">
+        <input type="text" draggable="false" class="notes-input" placeholder="Notes (grip, cue, weight, injury note…)" value="${(it.notes||'').replace(/"/g,'&quot;')}" data-day="${idx}" data-item="${i}">
+      </div>
+      <div class="slot-row3 alt-row">
+        ${altRowHTML}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="day-col" draggable="true" data-day="${idx}">
+    <div class="day-head">
+      <span class="day-drag-handle" title="Drag to reorder days">⠿</span>
+      <input class="day-title" draggable="false" value="${day.name}" data-day="${idx}" data-role="title">
+      <div class="day-reorder">
+        <span class="darrow${idx===0?' disabled':''}" data-day="${idx}" data-dir="left" title="Move day left">◀</span>
+        <span class="darrow${idx===totalDays-1?' disabled':''}" data-day="${idx}" data-dir="right" title="Move day right">▶</span>
+      </div>
+      <span class="x" data-day="${idx}" data-role="delete-day" title="Delete day">✕</span>
+    </div>
+    <div class="dropzone" data-day="${idx}">
+      ${itemsHTML || `<div class="empty-hint">Drag exercises here, or use "Add to day" in the library.</div>`}
+    </div>
+    <div class="intensity-title">Muscle load — this day</div>
+    ${barsHTML(computeMuscleScores(day.items))}
+  </div>`;
+}
+
+function renderDays(){
+  const container = document.getElementById('days');
+  container.innerHTML = state.days.map((d,i)=>dayHTML(d,i,state.days.length)).join('');
+
+  container.querySelectorAll('.dropzone').forEach(zone=>{
+    zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('over'); });
+    zone.addEventListener('dragleave', ()=> zone.classList.remove('over'));
+    zone.addEventListener('drop', e=>{
+      e.preventDefault(); e.stopPropagation(); zone.classList.remove('over');
+      let data;
+      try{ data = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
+      if(!data) return;
+      const targetDay = parseInt(zone.dataset.day);
+      if(data.type === 'add'){
+        addToDay(targetDay, data.exId);
+      } else if(data.type === 'move'){
+        const item = state.days[data.day].items.splice(data.index, 1)[0];
+        state.days[targetDay].items.push(item);
+        renderDays();
+      }
+    });
+  });
+
+  container.querySelectorAll('.slot').forEach(slotEl=>{
+    slotEl.addEventListener('dragstart', e=>{
+      e.stopPropagation();
+      const d = parseInt(slotEl.dataset.day), i = parseInt(slotEl.dataset.item);
+      e.dataTransfer.setData('text/plain', JSON.stringify({type:'move', day:d, index:i}));
+      slotEl.classList.add('dragging');
+    });
+    slotEl.addEventListener('dragend', ()=>{
+      slotEl.classList.remove('dragging');
+      document.querySelectorAll('.slot').forEach(s=>s.classList.remove('drag-over-top','drag-over-bottom'));
+    });
+    slotEl.addEventListener('dragover', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const rect = slotEl.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height/2;
+      slotEl.classList.toggle('drag-over-top', before);
+      slotEl.classList.toggle('drag-over-bottom', !before);
+    });
+    slotEl.addEventListener('dragleave', ()=>{
+      slotEl.classList.remove('drag-over-top','drag-over-bottom');
+    });
+    slotEl.addEventListener('drop', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const before = slotEl.classList.contains('drag-over-top');
+      slotEl.classList.remove('drag-over-top','drag-over-bottom');
+      let data;
+      try{ data = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
+      if(!data) return;
+      const targetDay = parseInt(slotEl.dataset.day);
+      let targetIndex = parseInt(slotEl.dataset.item);
+      if(data.type === 'add'){
+        const ex = EX_MAP[data.exId];
+        if(!ex) return;
+        state.days[targetDay].items.splice(before?targetIndex:targetIndex+1, 0, {exId:data.exId, sets:3, reps:'8-12', rest:90, notes:'', altExId:null});
+        renderDays();
+      } else if(data.type === 'move'){
+        const sourceDay = data.day, sourceIndex = data.index;
+        const item = state.days[sourceDay].items.splice(sourceIndex,1)[0];
+        if(sourceDay === targetDay && sourceIndex < targetIndex) targetIndex--;
+        state.days[targetDay].items.splice(before?targetIndex:targetIndex+1, 0, item);
+        renderDays();
+      }
+    });
+  });
+  container.querySelectorAll('.sets-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items[i].sets = parseInt(e.target.value) || 1;
+      renderDays();
+    });
+  });
+  container.querySelectorAll('.reps-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items[i].reps = e.target.value;
+      scheduleSave();
+    });
+  });
+  container.querySelectorAll('.rest-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items[i].rest = parseInt(e.target.value) || 0;
+      scheduleSave();
+    });
+  });
+  container.querySelectorAll('.notes-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items[i].notes = e.target.value;
+      scheduleSave();
+    });
+  });
+  container.querySelectorAll('[data-role=title]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      state.days[parseInt(e.target.dataset.day)].name = e.target.value;
+      scheduleSave();
+    });
+  });
+  container.querySelectorAll('[data-role=delete-day]').forEach(x=>{
+    x.addEventListener('click', e=>{
+      state.days.splice(parseInt(e.target.dataset.day),1);
+      renderDays();
+    });
+  });
+  container.querySelectorAll('.day-reorder .darrow').forEach(arrow=>{
+    arrow.addEventListener('click', e=>{
+      const d = parseInt(e.target.dataset.day);
+      const dir = e.target.dataset.dir;
+      const j = dir === 'left' ? d-1 : d+1;
+      if(j<0 || j>=state.days.length) return;
+      [state.days[d], state.days[j]] = [state.days[j], state.days[d]];
+      renderDays();
+    });
+  });
+  container.querySelectorAll('.day-col').forEach(colEl=>{
+    colEl.addEventListener('dragstart', e=>{
+      e.dataTransfer.setData('text/plain', JSON.stringify({type:'day-move', day: parseInt(colEl.dataset.day)}));
+      colEl.classList.add('day-dragging');
+    });
+    colEl.addEventListener('dragend', ()=>{
+      colEl.classList.remove('day-dragging');
+      document.querySelectorAll('.day-col').forEach(c=>c.classList.remove('day-drag-over-left','day-drag-over-right'));
+    });
+    colEl.addEventListener('dragover', e=>{
+      e.preventDefault();
+      const rect = colEl.getBoundingClientRect();
+      const before = (e.clientX - rect.left) < rect.width/2;
+      colEl.classList.toggle('day-drag-over-left', before);
+      colEl.classList.toggle('day-drag-over-right', !before);
+    });
+    colEl.addEventListener('dragleave', ()=>{
+      colEl.classList.remove('day-drag-over-left','day-drag-over-right');
+    });
+    colEl.addEventListener('drop', e=>{
+      e.preventDefault();
+      const before = colEl.classList.contains('day-drag-over-left');
+      colEl.classList.remove('day-drag-over-left','day-drag-over-right');
+      let data;
+      try{ data = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
+      if(!data || data.type !== 'day-move') return;
+      const sourceDay = data.day;
+      let targetIndex = parseInt(colEl.dataset.day);
+      if(sourceDay === targetIndex) return;
+      const item = state.days.splice(sourceDay,1)[0];
+      if(sourceDay < targetIndex) targetIndex--;
+      state.days.splice(before?targetIndex:targetIndex+1, 0, item);
+      renderDays();
+    });
+  });
+  container.querySelectorAll('.slot .x').forEach(x=>{
+    if(x.dataset.role) return;
+    x.addEventListener('click', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items.splice(i,1);
+      renderDays();
+    });
+  });
+  container.querySelectorAll('.ph-sets-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items[i].sets = parseInt(e.target.value) || 1;
+      scheduleSave();
+    });
+  });
+  container.querySelectorAll('.ph-reps-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items[i].reps = e.target.value;
+      scheduleSave();
+    });
+  });
+  container.querySelectorAll('.ph-rest-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      state.days[d].items[i].rest = parseInt(e.target.value) || 0;
+      scheduleSave();
+    });
+  });
+  container.querySelectorAll('.reorder-btns .arrow').forEach(arrow=>{
+    arrow.addEventListener('click', e=>{
+      const d = parseInt(e.target.dataset.day), i = parseInt(e.target.dataset.item);
+      const dir = e.target.dataset.dir;
+      const items = state.days[d].items;
+      const j = dir === 'up' ? i-1 : i+1;
+      if(j<0 || j>=items.length) return;
+      [items[i], items[j]] = [items[j], items[i]];
+      renderDays();
+    });
+  });
+
+  container.querySelectorAll('[data-action]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const action = e.currentTarget.dataset.action;
+      const d = parseInt(e.currentTarget.dataset.day), i = parseInt(e.currentTarget.dataset.item);
+      const it = state.days[d].items[i];
+
+      if(action === 'fill-placeholder'){
+        const candidates = findCandidates({muscle: it.muscle, pattern: it.pattern, type: it.type});
+        openSuggestPanel(`Suggestions for: ${it.role}`, candidates, pickedId=>{
+          state.days[d].items[i] = {
+            exId: pickedId,
+            sets: it.sets ?? 3, reps: it.reps || '8-12', rest: it.rest ?? 90, notes: it.notes || '',
+            altExId: null,
+          };
+          renderDays();
+        });
+      } else if(action === 'replace'){
+        const ex = EX_MAP[it.exId];
+        const candidates = findCandidates({muscle: ex.primary[0], excludeId: ex.id});
+        openSuggestPanel(`Replace: ${ex.name}`, candidates, pickedId=>{
+          it.exId = pickedId;
+          it.altExId = null;
+          renderDays();
+        });
+      } else if(action === 'set-alt'){
+        const ex = EX_MAP[it.exId];
+        const candidates = findCandidates({muscle: ex.primary[0], excludeId: ex.id});
+        openSuggestPanel(`Alternative for: ${ex.name}`, candidates, pickedId=>{
+          it.altExId = pickedId;
+          renderDays();
+        });
+      } else if(action === 'swap-alt'){
+        const tmp = it.exId;
+        it.exId = it.altExId;
+        it.altExId = tmp;
+        renderDays();
+      } else if(action === 'clear-alt'){
+        it.altExId = null;
+        renderDays();
+      }
+    });
+  });
+
+  renderWeekly();
+  scheduleSave();
+}
+
+function renderWeekly(){
+  const allItems = state.days.flatMap(d=>d.items);
+  document.getElementById('weeklyChart').innerHTML = barsHTML(computeMuscleScores(allItems));
+}
+
+document.getElementById('search').addEventListener('input', e=>{ state.search = e.target.value; renderLibrary(); });
+document.getElementById('equipFilter').addEventListener('change', e=>{ state.equip = e.target.value; renderLibrary(); });
+document.getElementById('patternFilter').addEventListener('change', e=>{ state.pattern = e.target.value; renderLibrary(); });
+document.getElementById('typeFilter').addEventListener('change', e=>{ state.type = e.target.value; renderLibrary(); });
+document.getElementById('viewFlat').addEventListener('click', e=>{
+  state.view='flat'; e.target.classList.add('active'); document.getElementById('viewGrouped').classList.remove('active'); renderLibrary();
+});
+document.getElementById('viewGrouped').addEventListener('click', e=>{
+  state.view='grouped'; e.target.classList.add('active'); document.getElementById('viewFlat').classList.remove('active'); renderLibrary();
+});
+document.getElementById('addDay').addEventListener('click', ()=>{
+  state.days.push({name:'New day', items:[]});
+  renderDays();
+});
+
+document.getElementById('splitName').addEventListener('input', e=>{
+  state.name = e.target.value;
+  scheduleSave();
+});
+
+document.getElementById('loadFileBtn').addEventListener('click', ()=>{
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt=>{
+    try{
+      const data = JSON.parse(evt.target.result);
+      if(!data.days || !Array.isArray(data.days)) throw new Error('Missing "days" array');
+      let registeredCustom = 0;
+      if(Array.isArray(data.customExercises)){
+        data.customExercises.forEach(raw=>{
+          if(!raw || !raw.id || !raw.name || EX_MAP[raw.id]) return;
+          const pattern = raw.pattern || 'isolation';
+          registerExercise({
+            id: raw.id, name: raw.name, equip: raw.equip || 'Other', pattern,
+            type: raw.type || (pattern === 'isolation' ? 'isolation' : 'compound'),
+            primary: raw.primary || [], secondary: raw.secondary || [],
+            group: raw.group || null, custom: true,
+          });
+          registeredCustom++;
+        });
+        if(registeredCustom){ renderFilters(); }
+      }
+      const skipped = [];
+      const cleanDays = data.days.map(d=>({
+        name: d.name || 'Day',
+        items: (d.items||[]).filter(it=>{
+          if(it.placeholder) return true;
+          const ok = !!EX_MAP[it.exId];
+          if(!ok) skipped.push(it.exId);
+          return ok;
+        }).map(it=>{
+          if(it.placeholder){
+            return {
+              placeholder:true, role: it.role || 'Exercise',
+              muscle: it.muscle || null, pattern: it.pattern || null, type: it.type || null,
+              sets: it.sets !== undefined ? parseInt(it.sets) : 3,
+              reps: it.reps || '8-12',
+              rest: it.rest !== undefined ? parseInt(it.rest) : 90,
+              notes: it.notes || '',
+            };
+          }
+          return {
+            exId: it.exId,
+            sets: parseInt(it.sets) || 3,
+            reps: it.reps || '8-12',
+            rest: it.rest !== undefined ? parseInt(it.rest) : 90,
+            notes: it.notes || '',
+            altExId: (it.altExId && EX_MAP[it.altExId]) ? it.altExId : null,
+          };
+        }),
+      }));
+      const defaultName = file.name.replace(/\.[^/.]+$/, '');
+      state.name = data.name || defaultName;
+      state.days = cleanDays;
+      document.getElementById('splitName').value = state.name;
+      renderDays();
+      if(skipped.length){
+        alert('Loaded, but skipped unknown exercise id(s): ' + skipped.join(', '));
+      }
+    }catch(err){
+      alert('Could not read that file: ' + err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const usedExIds = new Set();
+  state.days.forEach(d=>d.items.forEach(it=>{
+    if(it.placeholder) return;
+    if(it.exId) usedExIds.add(it.exId);
+    if(it.altExId) usedExIds.add(it.altExId);
+  }));
+  const customExercises = [...usedExIds]
+    .map(id=>EX_MAP[id])
+    .filter(ex=>ex && ex.custom);
+  const data = {name: state.name, customExercises, days: state.days};
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = (state.name || 'my_split').trim().replace(/\s+/g,'_').replace(/[^a-z0-9_-]/gi,'') || 'my_split';
+  a.download = safeName + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+/* ---------- Exercise library management ---------- */
+
+function slugify(str){
+  return (str||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || 'exercise';
+}
+
+function uniqueId(base){
+  if(!EX_MAP[base]) return base;
+  let n = 2;
+  while(EX_MAP[base+'_'+n]) n++;
+  return base+'_'+n;
+}
+
+function registerExercise(ex){
+  EX.push(ex);
+  EX_MAP[ex.id] = ex;
+}
+
+document.getElementById('loadExercisesBtn').addEventListener('click', ()=>{
+  document.getElementById('exercisesFileInput').click();
+});
+
+document.getElementById('exercisesFileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt=>{
+    try{
+      const data = JSON.parse(evt.target.result);
+      const list = Array.isArray(data) ? data : (Array.isArray(data.exercises) ? data.exercises : null);
+      if(!list) throw new Error('Expected a JSON array of exercises, or {"exercises":[...]}');
+      let added = 0, skipped = 0;
+      list.forEach(raw=>{
+        if(!raw || !raw.name || !Array.isArray(raw.primary) || !raw.primary.length){ skipped++; return; }
+        const badMuscle = [...raw.primary, ...(raw.secondary||[])].some(k=>!MUSCLE_MAP[k]);
+        if(badMuscle){ skipped++; return; }
+        let id = raw.id ? slugify(raw.id) : slugify(raw.name);
+        if(EX_MAP[id]){
+          if(raw.id){ skipped++; return; } // explicit id collision, don't overwrite
+          id = uniqueId(id);
+        }
+        const pattern = raw.pattern || 'isolation';
+        registerExercise({
+          id,
+          name: raw.name,
+          equip: raw.equip || 'Other',
+          pattern,
+          type: raw.type || (pattern === 'isolation' ? 'isolation' : 'compound'),
+          primary: raw.primary,
+          secondary: raw.secondary || [],
+          group: raw.group || null,
+          custom: true,
+        });
+        added++;
+      });
+      renderFilters();
+      renderLibrary();
+      alert(`Added ${added} exercise${added===1?'':'s'}${skipped?`, skipped ${skipped}`:''}.`);
+    }catch(err){
+      alert('Could not read that file: ' + err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+/* ---------- Custom exercise creation form ---------- */
+
+/* ---------- Suggestion panel (used for fill-placeholder, replace, set-alt) ---------- */
+
+function findCandidates({muscle, pattern, type, excludeId}){
+  let list = EX.filter(e=>e.id !== excludeId);
+  if(muscle){
+    list = list.filter(e=>e.primary.includes(muscle) || e.secondary.includes(muscle));
+  }
+  if(type){
+    list = list.filter(e=>e.type === type);
+  }
+  list.sort((a,b)=>{
+    const aPrim = muscle && a.primary.includes(muscle) ? 0 : 1;
+    const bPrim = muscle && b.primary.includes(muscle) ? 0 : 1;
+    if(aPrim !== bPrim) return aPrim - bPrim;
+    const aPat = pattern && a.pattern===pattern ? 0 : 1;
+    const bPat = pattern && b.pattern===pattern ? 0 : 1;
+    return aPat - bPat;
+  });
+  return list.slice(0, 25);
+}
+
+function openSuggestPanel(title, candidates, onPick){
+  document.getElementById('suggestTitle').textContent = title;
+  const list = document.getElementById('suggestList');
+  list.innerHTML = candidates.map(ex=>`
+    <div class="suggest-row">
+      <div class="suggest-info">
+        <div class="suggest-name">${ex.name}</div>
+        <div class="suggest-meta">${ex.equip} · ${ex.pattern} · ${ex.type}</div>
+      </div>
+      ${muscleStripHTML(ex)}
+      <button class="btn small suggest-use" data-id="${ex.id}">Use</button>
+    </div>
+  `).join('') || `<div class="empty-hint">No close matches found — browse the library on the left instead.</div>`;
+  list.querySelectorAll('.suggest-use').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      onPick(btn.dataset.id);
+      closeSuggestPanel();
+    });
+  });
+  document.getElementById('suggestPanel').style.display = 'flex';
+}
+
+function closeSuggestPanel(){
+  document.getElementById('suggestPanel').style.display = 'none';
+}
+
+document.getElementById('suggestClose').addEventListener('click', closeSuggestPanel);
+document.getElementById('suggestPanel').addEventListener('click', e=>{
+  if(e.target.id === 'suggestPanel') closeSuggestPanel();
+});
+
+/* ---------- Upper/Lower split template ---------- */
+
+const TEMPLATE_LIBRARY = [
+  {
+    id: 'hevy_upper_lower',
+    name: 'Classic 4-Day Upper/Lower',
+    source: 'Based on Hevy\u2019s Upper/Lower Split guide (hevyapp.com)',
+    description: '2 upper + 2 lower days, straightforward compound-first structure, moderate rest, built for consistent linear progression.',
+    days: [
+      {name:'Upper 1', roles:[
+        {role:'Horizontal Press', muscle:'chest', pattern:'push', type:'compound', sets:3, reps:'6-10', rest:120},
+        {role:'Horizontal Row', muscle:'lats', pattern:'pull', type:'compound', sets:3, reps:'6-10', rest:120},
+        {role:'Overhead Press', muscle:'frontDelts', pattern:'push', type:'compound', sets:3, reps:'8-12', rest:90},
+        {role:'Lat Pulldown', muscle:'lats', pattern:'pull', type:'compound', sets:3, reps:'8-12', rest:90},
+        {role:'Chest Isolation', muscle:'chest', pattern:'isolation', type:'isolation', sets:2, reps:'12-15', rest:60},
+        {role:'Biceps Isolation', muscle:'biceps', pattern:'isolation', type:'isolation', sets:2, reps:'12-15', rest:60},
+        {role:'Triceps Isolation', muscle:'triceps', pattern:'isolation', type:'isolation', sets:2, reps:'12-15', rest:60},
+        {role:'Rear Delt / Trap Isolation', muscle:'rearDelts', pattern:'isolation', type:'isolation', sets:2, reps:'15-25', rest:60},
+      ]},
+      {name:'Lower 1', roles:[
+        {role:'Squat Pattern', muscle:'quads', pattern:'squat', type:'compound', sets:3, reps:'6-10', rest:150},
+        {role:'Hamstring / Glute Compound', muscle:'hamstrings', pattern:'hinge', type:'compound', sets:3, reps:'8-12', rest:90},
+        {role:'Quad-Dominant Lunge/Squat', muscle:'quads', pattern:'squat', type:'compound', sets:3, reps:'10-15', rest:90},
+        {role:'Hamstring Isolation', muscle:'hamstrings', pattern:'isolation', type:'isolation', sets:3, reps:'12-15', rest:60},
+        {role:'Calf Isolation', muscle:'calves', pattern:'isolation', type:'isolation', sets:3, reps:'8-12', rest:60},
+      ]},
+      {name:'Upper 2', roles:[
+        {role:'Vertical Pull', muscle:'lats', pattern:'pull', type:'compound', sets:3, reps:'5-10', rest:120},
+        {role:'Incline Press', muscle:'chest', pattern:'push', type:'compound', sets:3, reps:'8-10', rest:90},
+        {role:'Overhead Press Variant', muscle:'frontDelts', pattern:'push', type:'compound', sets:3, reps:'10-12', rest:90},
+        {role:'Lat Isolation', muscle:'lats', pattern:'isolation', type:'isolation', sets:3, reps:'10-15', rest:60},
+        {role:'Chest Compound (light)', muscle:'chest', pattern:'push', type:'compound', sets:2, reps:'10-20', rest:60},
+        {role:'Biceps Isolation', muscle:'biceps', pattern:'isolation', type:'isolation', sets:3, reps:'10-15', rest:60},
+        {role:'Triceps Isolation', muscle:'triceps', pattern:'isolation', type:'isolation', sets:3, reps:'12-15', rest:60},
+      ]},
+      {name:'Lower 2', roles:[
+        {role:'Quad-Dominant Press/Squat', muscle:'quads', pattern:'squat', type:'compound', sets:3, reps:'8-12', rest:120},
+        {role:'Hip Hinge', muscle:'hamstrings', pattern:'hinge', type:'compound', sets:3, reps:'8-10', rest:120},
+        {role:'Quad Isolation', muscle:'quads', pattern:'isolation', type:'isolation', sets:3, reps:'12-15', rest:60},
+        {role:'Calf Isolation', muscle:'calves', pattern:'isolation', type:'isolation', sets:4, reps:'12-20', rest:60},
+        {role:'Abs', muscle:'abs', pattern:'isolation', type:'isolation', sets:4, reps:'12-15', rest:45},
+      ]},
+    ],
+  },
+  {
+    id: 'muscleandstrength_upper_lower',
+    name: '4-Day Upper/Lower Bodybuilding',
+    source: 'Based on Muscle & Strength\u2019s Upper/Lower Gym Bodybuilding Workout (muscleandstrength.com)',
+    description: 'Compound-first, then isolation finishers with 3-second negatives. Slightly higher volume per session, classic bodybuilding structure.',
+    days: [
+      {name:'Upper 1', roles:[
+        {role:'Chest Compound', muscle:'chest', pattern:'push', type:'compound', sets:3, reps:'6-12', rest:120},
+        {role:'Back Compound', muscle:'lats', pattern:'pull', type:'compound', sets:3, reps:'6-12', rest:120},
+        {role:'Shoulder Compound', muscle:'frontDelts', pattern:'push', type:'compound', sets:3, reps:'8-12', rest:90},
+        {role:'Chest Isolation (3s negative)', muscle:'chest', pattern:'isolation', type:'isolation', sets:2, reps:'10-12', rest:60},
+        {role:'Back Isolation (3s negative)', muscle:'lats', pattern:'isolation', type:'isolation', sets:2, reps:'10-12', rest:60},
+        {role:'Side Delt Isolation', muscle:'sideDelts', pattern:'isolation', type:'isolation', sets:2, reps:'10-15', rest:60},
+        {role:'Triceps Isolation (3s negative)', muscle:'triceps', pattern:'isolation', type:'isolation', sets:3, reps:'8-12', rest:60},
+        {role:'Biceps Isolation (3s negative)', muscle:'biceps', pattern:'isolation', type:'isolation', sets:3, reps:'8-12', rest:60},
+      ]},
+      {name:'Lower 1', roles:[
+        {role:'Squat Pattern', muscle:'quads', pattern:'squat', type:'compound', sets:3, reps:'6-12', rest:150},
+        {role:'Hip Hinge (Stiff-Leg/RDL)', muscle:'hamstrings', pattern:'hinge', type:'compound', sets:3, reps:'8-12', rest:120},
+        {role:'Standing Calf (compound/taxing)', muscle:'calves', pattern:'isolation', type:'isolation', sets:3, reps:'10-15', rest:60},
+        {role:'Quad Isolation (3s negative)', muscle:'quads', pattern:'isolation', type:'isolation', sets:2, reps:'10-12', rest:60},
+        {role:'Hamstring Isolation (3s negative)', muscle:'hamstrings', pattern:'isolation', type:'isolation', sets:2, reps:'10-12', rest:60},
+        {role:'Seated Calf Isolation (3s negative)', muscle:'calves', pattern:'isolation', type:'isolation', sets:2, reps:'10-12', rest:45},
+        {role:'Abs', muscle:'abs', pattern:'isolation', type:'isolation', sets:3, reps:'10-12', rest:45},
+        {role:'Posterior Chain / Lower Back Isolation', muscle:'hamstrings', pattern:'isolation', type:'isolation', sets:3, reps:'10-12', rest:60},
+      ]},
+      {name:'Upper 2', roles:[
+        {role:'Incline Chest Compound', muscle:'chest', pattern:'push', type:'compound', sets:3, reps:'8-12', rest:120},
+        {role:'Back / Trap Compound (Rack Pull)', muscle:'lats', pattern:'hinge', type:'compound', sets:3, reps:'5-8', rest:150},
+        {role:'Shoulder Compound (Military Press)', muscle:'frontDelts', pattern:'push', type:'compound', sets:3, reps:'8-12', rest:90},
+        {role:'Chest Isolation/Machine (3s negative)', muscle:'chest', pattern:'isolation', type:'isolation', sets:2, reps:'8-12', rest:60},
+        {role:'Back Isolation/Machine (3s negative)', muscle:'lats', pattern:'isolation', type:'isolation', sets:2, reps:'8-12', rest:60},
+        {role:'Shoulder Isolation/Machine (3s negative)', muscle:'frontDelts', pattern:'isolation', type:'isolation', sets:2, reps:'8-12', rest:60},
+        {role:'Biceps Isolation (3s negative)', muscle:'biceps', pattern:'isolation', type:'isolation', sets:3, reps:'8-12', rest:60},
+        {role:'Triceps Isolation (3s negative)', muscle:'triceps', pattern:'isolation', type:'isolation', sets:3, reps:'8-12', rest:60},
+      ]},
+      {name:'Lower 2', roles:[
+        {role:'Quad-Dominant Press', muscle:'quads', pattern:'squat', type:'compound', sets:3, reps:'10-20', rest:120},
+        {role:'Hip Hinge (Stiff-Leg DB)', muscle:'hamstrings', pattern:'hinge', type:'compound', sets:3, reps:'8-12', rest:120},
+        {role:'Calf Compound', muscle:'calves', pattern:'isolation', type:'isolation', sets:3, reps:'10-15', rest:60},
+        {role:'Quad Isolation/Machine', muscle:'quads', pattern:'isolation', type:'isolation', sets:2, reps:'8-12', rest:60},
+        {role:'Hamstring Isolation (3s negative)', muscle:'hamstrings', pattern:'isolation', type:'isolation', sets:2, reps:'10-12', rest:60},
+        {role:'Seated Calf Isolation (3s negative)', muscle:'calves', pattern:'isolation', type:'isolation', sets:2, reps:'10-12', rest:45},
+        {role:'Abs (Plank, 60s hold)', muscle:'abs', pattern:'isolation', type:'isolation', sets:3, reps:'60s hold', rest:45},
+        {role:'Lower Back / Glute Isolation (Hyperextension)', muscle:'glutes', pattern:'isolation', type:'isolation', sets:3, reps:'10-12', rest:60},
+      ]},
+    ],
+  },
+];
+
+function applyTemplate(tpl){
+  const hasContent = state.days.some(d=>d.items.length);
+  if(hasContent && !confirm(`This replaces your current split with the "${tpl.name}" template. Continue?`)) return;
+  state.name = tpl.name;
+  document.getElementById('splitName').value = state.name;
+  state.days = tpl.days.map(day=>({
+    name: day.name,
+    items: day.roles.map(r=>({
+      placeholder:true, role:r.role,
+      muscle:r.muscle||null, pattern:r.pattern||null, type:r.type||null,
+      sets:r.sets??3, reps:r.reps||'8-12', rest:r.rest??90, notes:r.notes||'',
+    })),
+  }));
+  renderDays();
+  closeSuggestPanel();
+}
+
+function openTemplateGallery(){
+  document.getElementById('suggestTitle').textContent = 'Choose a template';
+  const list = document.getElementById('suggestList');
+  list.innerHTML = TEMPLATE_LIBRARY.map((tpl,i)=>`
+    <div class="suggest-row" style="align-items:flex-start;">
+      <div class="suggest-info">
+        <div class="suggest-name">${tpl.name}</div>
+        <div class="suggest-meta">${tpl.source}</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">${tpl.description}</div>
+      </div>
+      <button class="btn small use-template" data-idx="${i}">Use this template</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.use-template').forEach(btn=>{
+    btn.addEventListener('click', ()=> applyTemplate(TEMPLATE_LIBRARY[parseInt(btn.dataset.idx)]));
+  });
+  document.getElementById('suggestPanel').style.display = 'flex';
+}
+
+document.getElementById('templateBtn').addEventListener('click', openTemplateGallery);
+
+document.getElementById('loadTemplateBtn').addEventListener('click', ()=>{
+  document.getElementById('templateFileInput').click();
+});
+
+document.getElementById('templateFileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt=>{
+    try{
+      const data = JSON.parse(evt.target.result);
+      if(!data.days || !Array.isArray(data.days)) throw new Error('Missing "days" array');
+      const tpl = {
+        name: data.name || file.name.replace(/\.[^/.]+$/, ''),
+        source: data.source || 'Uploaded template',
+        description: data.description || '',
+        days: data.days.map(d=>({
+          name: d.name || 'Day',
+          roles: (d.roles || d.items || []).map(r=>({
+            role: r.role || r.name || 'Exercise',
+            muscle: r.muscle || null,
+            pattern: r.pattern || null,
+            type: r.type || null,
+            sets: r.sets, reps: r.reps, rest: r.rest, notes: r.notes,
+          })),
+        })),
+      };
+      applyTemplate(tpl);
+    }catch(err){
+      alert('Could not read that template file: ' + err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+let cfState = {primary:[], secondary:[]};
+
+function openCustomForm(sourceEx){
+  cfState = sourceEx
+    ? {primary:[...sourceEx.primary], secondary:[...sourceEx.secondary]}
+    : {primary:[], secondary:[]};
+  document.getElementById('cf_name').value = sourceEx ? sourceEx.name + ' (copy)' : '';
+  document.getElementById('cf_equip').value = sourceEx ? sourceEx.equip : '';
+  document.getElementById('cf_group').value = sourceEx ? (sourceEx.group || sourceEx.name) : '';
+  document.getElementById('cf_pattern').value = sourceEx ? sourceEx.pattern : 'isolation';
+  document.getElementById('cf_type').value = sourceEx ? sourceEx.type : 'isolation';
+  document.querySelector('.cf-title').textContent = sourceEx ? `New exercise (from ${sourceEx.name})` : 'New exercise';
+  renderCustomMuscleChips();
+  document.getElementById('customForm').style.display = 'flex';
+  document.getElementById('cf_name').focus();
+}
+
+function renderCustomMuscleChips(){
+  const primaryEl = document.getElementById('cf_primary');
+  const secondaryEl = document.getElementById('cf_secondary');
+  primaryEl.innerHTML = MUSCLES.map(m=>{
+    const on = cfState.primary.includes(m.key);
+    return `<span class="cf-chip${on?' on':''}" data-group="primary" data-key="${m.key}" style="${on?`background:${m.color}`:''}">${m.label}</span>`;
+  }).join('');
+  secondaryEl.innerHTML = MUSCLES.map(m=>{
+    const on = cfState.secondary.includes(m.key);
+    return `<span class="cf-chip${on?' on':''}" data-group="secondary" data-key="${m.key}" style="${on?`background:${m.color}`:''}">${m.label}</span>`;
+  }).join('');
+  document.getElementById('cf_secondary_order').textContent = cfState.secondary.length
+    ? 'Order: ' + cfState.secondary.map(k=>MUSCLE_MAP[k].label).join(' → ')
+    : '';
+  document.querySelectorAll('.cf-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      const group = chip.dataset.group, key = chip.dataset.key;
+      const arr = cfState[group];
+      const idx = arr.indexOf(key);
+      if(idx === -1) arr.push(key); else arr.splice(idx,1);
+      renderCustomMuscleChips();
+    });
+  });
+}
+
+document.getElementById('newExerciseBtn').addEventListener('click', ()=>openCustomForm(null));
+
+document.getElementById('cf_cancel').addEventListener('click', ()=>{
+  document.getElementById('customForm').style.display = 'none';
+});
+
+document.getElementById('cf_save').addEventListener('click', ()=>{
+  const name = document.getElementById('cf_name').value.trim();
+  if(!name){ alert('Give the exercise a name.'); return; }
+  if(!cfState.primary.length){ alert('Pick at least one primary muscle.'); return; }
+  const equip = document.getElementById('cf_equip').value.trim() || 'Other';
+  const pattern = document.getElementById('cf_pattern').value;
+  const type = document.getElementById('cf_type').value;
+  const group = document.getElementById('cf_group').value.trim() || null;
+  const id = uniqueId(slugify(name));
+  registerExercise({
+    id, name, equip, pattern, type, group,
+    primary: [...cfState.primary],
+    secondary: [...cfState.secondary],
+    custom: true,
+  });
+  document.getElementById('customForm').style.display = 'none';
+  renderFilters();
+  renderLibrary();
+});
+
+renderLegend();
+renderFilters();
+renderLibrary();
+
+(async ()=>{
+  await loadFromFirestore();
+  document.getElementById('splitName').value = state.name;
+  renderFilters();
+  renderLibrary();
+  renderDays();
+})();
+</script>
+</body>
+</html>
