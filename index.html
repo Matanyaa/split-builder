@@ -267,7 +267,10 @@
     <h1>Split builder</h1>
     <p>Search the library, drag exercises into your split, watch the muscle load update live.</p>
   </div>
-  <div id="syncStatus" style="font-size:11px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.03em;">Loading…</div>
+  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+    <div id="syncStatus" style="font-size:11px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.03em;">Loading…</div>
+    <div id="appVersion" title="App version" style="font-size:10px; color:var(--text-mute); font-family:'IBM Plex Mono',monospace; letter-spacing:0.02em;"></div>
+  </div>
 </header>
 
 <div class="legend" id="legend"></div>
@@ -385,6 +388,18 @@
 </div>
 
 <script>
+/* ---------- Version ----------
+   Scheme: vMAJOR.MINOR.PATCH
+   MAJOR = breaking changes to stored data (needs migration)
+   MINOR = new features
+   PATCH = fixes / small tweaks
+   Bump this (and add a line below) whenever a new version is deployed. */
+const APP_VERSION = 'v1.0.0';
+const APP_VERSION_DATE = '2026-08-16';
+const CHANGELOG = [
+  { version: 'v1.0.0', date: '2026-08-16', notes: 'First tagged version. Edit ability for all exercises (including built-ins, persisted as overrides); delete for custom exercises.' },
+];
+
 const MUSCLES = [
   {key:'chest', label:'Chest', color:'#e2574c'},
   {key:'lats', label:'Lats/back', color:'#3f8fd1'},
@@ -1777,6 +1792,8 @@ document.getElementById('cf_delete').addEventListener('click', ()=>{
   const deleted = deleteExercise(cfState.editingId);
   if(deleted) document.getElementById('customForm').style.display = 'none';
 });
+
+document.getElementById('appVersion').textContent = `${APP_VERSION} · ${APP_VERSION_DATE}`;
 
 renderLegend();
 renderFilters();
