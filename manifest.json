@@ -1,0 +1,17 @@
+{
+  "name": "Split Builder",
+  "short_name": "Split Builder",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#121210",
+  "theme_color": "#121210",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
