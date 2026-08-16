@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Split Builder</title>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -33,6 +36,13 @@
   header h1{font-size:28px; text-transform:uppercase;}
   header p{margin:2px 0 0; color:var(--text-dim); font-size:13px;}
   .legend{display:flex; flex-wrap:wrap; gap:6px 14px; padding:10px 24px; border-bottom:1px solid var(--border); background:var(--panel2);}
+  #updateBanner{
+    display:flex; align-items:center; gap:12px; padding:8px 24px;
+    background:var(--accent-dim); border-bottom:1px solid var(--accent);
+    font-size:12px; color:var(--text);
+  }
+  #updateBanner .x{cursor:pointer; margin-left:auto; color:var(--text-dim); font-size:14px;}
+  #updateBanner .x:hover{color:var(--text);}
   .legend span{display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.03em;}
   .legend i{width:10px; height:10px; border-radius:2px; display:inline-block;}
   .layout{display:grid; grid-template-columns:360px 1fr; gap:0; min-height:calc(100vh - 100px);}
@@ -273,6 +283,12 @@
   </div>
 </header>
 
+<div id="updateBanner" style="display:none;">
+  <span>A newer version is available.</span>
+  <button id="updateReloadBtn" class="btn small">Reload to update</button>
+  <span class="x" id="updateDismiss" title="Dismiss">✕</span>
+</div>
+
 <div class="legend" id="legend"></div>
 
 <div class="layout">
@@ -394,9 +410,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.0.0';
+const APP_VERSION = 'v1.1.0';
 const APP_VERSION_DATE = '2026-08-16';
 const CHANGELOG = [
+  { version: 'v1.1.0', date: '2026-08-16', notes: 'Added update-check: re-fetches index.html on load and offers a reload if a newer version is live. Never forces an update, and fails silently offline. Single-file only, no separate version file.' },
   { version: 'v1.0.0', date: '2026-08-16', notes: 'First tagged version. Edit ability for all exercises (including built-ins, persisted as overrides); delete for custom exercises.' },
 ];
 
@@ -1794,6 +1811,28 @@ document.getElementById('cf_delete').addEventListener('click', ()=>{
 });
 
 document.getElementById('appVersion').textContent = `${APP_VERSION} · ${APP_VERSION_DATE}`;
+
+async function checkForUpdate(){
+  try{
+    const res = await fetch('./index.html?_=' + Date.now(), {cache:'no-store'});
+    if(!res.ok) return;
+    const html = await res.text();
+    const match = html.match(/const APP_VERSION\s*=\s*'([^']+)'/);
+    const remoteVersion = match ? match[1] : null;
+    if(!remoteVersion || remoteVersion === APP_VERSION) return;
+    const dismissed = localStorage.getItem('splitBuilderDismissedVersion');
+    if(dismissed === remoteVersion) return;
+    document.getElementById('updateBanner').style.display = 'flex';
+    document.getElementById('updateReloadBtn').onclick = ()=> location.reload();
+    document.getElementById('updateDismiss').onclick = ()=>{
+      localStorage.setItem('splitBuilderDismissedVersion', remoteVersion);
+      document.getElementById('updateBanner').style.display = 'none';
+    };
+  }catch(err){
+    // Offline or request failed — say nothing, let the person keep using what they have.
+  }
+}
+checkForUpdate();
 
 renderLegend();
 renderFilters();
