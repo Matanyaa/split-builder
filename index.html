@@ -410,9 +410,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.1';
 const APP_VERSION_DATE = '2026-08-16';
 const CHANGELOG = [
+  { version: 'v1.1.1', date: '2026-08-16', notes: 'Version bump only, to test the update-check banner. No functional changes.' },
   { version: 'v1.1.0', date: '2026-08-16', notes: 'Added update-check: re-fetches index.html on load and offers a reload if a newer version is live. Never forces an update, and fails silently offline. Single-file only, no separate version file.' },
   { version: 'v1.0.0', date: '2026-08-16', notes: 'First tagged version. Edit ability for all exercises (including built-ins, persisted as overrides); delete for custom exercises.' },
 ];
