@@ -205,11 +205,11 @@
     border:1px solid var(--border);
   }
   .copy-btn:hover{color:var(--accent); border-color:var(--accent);}
-  .delete-btn{
+  .edit-btn{
     cursor:pointer; color:var(--text-mute); font-size:12px; padding:2px 5px; border-radius:4px;
     border:1px solid var(--border);
   }
-  .delete-btn:hover{color:#e5544c; border-color:#e5544c;}
+  .edit-btn:hover{color:var(--accent); border-color:var(--accent);}
   .variant-row{display:flex; align-items:center; gap:8px; margin:6px 0; font-size:11px; color:var(--text-dim);}
   .variant-row select{
     flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text);
@@ -342,6 +342,7 @@
       <div class="cf-actions">
         <button class="btn small" id="cf_save">Save exercise</button>
         <button class="btn small" id="cf_cancel">Cancel</button>
+        <button class="btn small" id="cf_delete" style="display:none; margin-left:auto; border-color:#e5544c; color:#e5544c;">Delete exercise</button>
       </div>
     </div>
 
@@ -574,6 +575,7 @@ const splitDocRef = db.collection('splits').doc('default');
 
 let isLoading = true;
 let saveTimer = null;
+const editedBuiltins = new Set();
 
 function setSyncStatus(text){
   const el = document.getElementById('syncStatus');
@@ -596,7 +598,11 @@ async function saveToFirestore(){
       if(it.altExId) usedExIds.add(it.altExId);
     }));
     const customExercises = [...usedExIds].map(id=>EX_MAP[id]).filter(ex=>ex && ex.custom);
-    const payload = {name: state.name, days: state.days, customExercises};
+    const builtinOverrides = [...editedBuiltins].map(id=>EX_MAP[id]).filter(Boolean).map(ex=>({
+      id: ex.id, name: ex.name, equip: ex.equip, pattern: ex.pattern, type: ex.type,
+      group: ex.group, primary: ex.primary, secondary: ex.secondary,
+    }));
+    const payload = {name: state.name, days: state.days, customExercises, builtinOverrides};
     await splitDocRef.set({
       data: payload,
       updated_at: firebase.firestore.FieldValue.serverTimestamp(),
@@ -617,6 +623,21 @@ async function loadFromFirestore(){
         payload.customExercises.forEach(raw=>{
           if(!raw || !raw.id || !raw.name || EX_MAP[raw.id]) return;
           registerExercise(raw);
+        });
+      }
+      if(Array.isArray(payload.builtinOverrides)){
+        payload.builtinOverrides.forEach(o=>{
+          if(!o || !o.id) return;
+          const ex = EX_MAP[o.id];
+          if(!ex) return;
+          if(o.name) ex.name = o.name;
+          if(o.equip) ex.equip = o.equip;
+          if(o.pattern) ex.pattern = o.pattern;
+          if(o.type) ex.type = o.type;
+          ex.group = o.group || null;
+          if(Array.isArray(o.primary)) ex.primary = o.primary;
+          if(Array.isArray(o.secondary)) ex.secondary = o.secondary;
+          editedBuiltins.add(o.id);
         });
       }
       if(payload.name) state.name = payload.name;
@@ -715,7 +736,7 @@ function exCardHTML(ex){
       <div class="ex-card-actions">
         ${muscleStripHTML(ex)}
         <span class="copy-btn" data-copy-id="${ex.id}" title="Copy as new exercise (template)">⎘</span>
-        ${ex.custom ? `<span class="delete-btn" data-delete-id="${ex.id}" title="Delete this custom exercise">🗑</span>` : ''}
+        <span class="edit-btn" data-edit-id="${ex.id}" title="Edit this exercise">✎</span>
       </div>
     </div>
     <div class="muscle-chips">
@@ -745,7 +766,7 @@ function groupCardHTML(groupName, variants){
       <div class="ex-card-actions">
         ${muscleStripHTML(first)}
         <span class="copy-btn" data-copy-group="true" title="Copy selected variant as a new exercise template">⎘</span>
-        <span class="delete-btn" data-delete-group="true" title="Delete this custom exercise variant" style="${first.custom?'':'display:none'}">🗑</span>
+        <span class="edit-btn" data-edit-group="true" title="Edit selected variant">✎</span>
       </div>
     </div>
     <div class="muscle-chips">
@@ -847,34 +868,29 @@ function renderLibrary(){
       openCustomForm(EX_MAP[variantId]);
     });
   });
-  container.querySelectorAll('[data-delete-id]').forEach(btn=>{
+  container.querySelectorAll('[data-edit-id]').forEach(btn=>{
     btn.addEventListener('click', e=>{
       e.stopPropagation();
-      deleteExercise(btn.dataset.deleteId);
+      openCustomForm(EX_MAP[btn.dataset.editId], {isEdit:true});
     });
   });
   container.querySelectorAll('.group-card').forEach(card=>{
-    const delBtn = card.querySelector('[data-delete-group]');
+    const editBtn = card.querySelector('[data-edit-group]');
     const variantSel = card.querySelector('.variant-select');
-    if(!delBtn || !variantSel) return;
-    const syncDelBtn = ()=>{
-      const ex = EX_MAP[variantSel.value];
-      delBtn.style.display = ex && ex.custom ? '' : 'none';
-    };
-    variantSel.addEventListener('change', syncDelBtn);
-    delBtn.addEventListener('click', e=>{
+    if(!editBtn || !variantSel) return;
+    editBtn.addEventListener('click', e=>{
       e.stopPropagation();
-      deleteExercise(variantSel.value);
+      openCustomForm(EX_MAP[variantSel.value], {isEdit:true});
     });
   });
 }
 
 function deleteExercise(id){
   const ex = EX_MAP[id];
-  if(!ex) return;
+  if(!ex) return false;
   if(!ex.custom){
     alert('Only custom exercises you created can be deleted. Built-in exercises are part of the library and can\'t be removed.');
-    return;
+    return false;
   }
   let usageCount = 0;
   state.days.forEach(d=>d.items.forEach(it=>{
@@ -884,7 +900,7 @@ function deleteExercise(id){
   const warning = usageCount
     ? `"${ex.name}" is used in ${usageCount} place${usageCount===1?'':'s'} in your split. Deleting it will remove ${usageCount===1?'that slot':'those slots'} too. Delete anyway?`
     : `Delete "${ex.name}"? This can't be undone.`;
-  if(!confirm(warning)) return;
+  if(!confirm(warning)) return false;
 
   state.days.forEach(d=>{
     d.items = d.items.filter(it=> it.exId !== id);
@@ -901,6 +917,7 @@ function deleteExercise(id){
   renderLibrary();
   renderDays();
   scheduleSave();
+  return true;
 }
 
 const libraryPanel = document.querySelector('.library');
@@ -1670,18 +1687,23 @@ document.getElementById('templateFileInput').addEventListener('change', e=>{
   reader.readAsText(file);
 });
 
-let cfState = {primary:[], secondary:[]};
+let cfState = {primary:[], secondary:[], editingId:null};
 
-function openCustomForm(sourceEx){
+function openCustomForm(sourceEx, opts){
+  const isEdit = !!(opts && opts.isEdit && sourceEx);
   cfState = sourceEx
-    ? {primary:[...sourceEx.primary], secondary:[...sourceEx.secondary]}
-    : {primary:[], secondary:[]};
-  document.getElementById('cf_name').value = sourceEx ? sourceEx.name + ' (copy)' : '';
+    ? {primary:[...sourceEx.primary], secondary:[...sourceEx.secondary], editingId: isEdit ? sourceEx.id : null}
+    : {primary:[], secondary:[], editingId:null};
+  document.getElementById('cf_name').value = sourceEx ? (isEdit ? sourceEx.name : sourceEx.name + ' (copy)') : '';
   document.getElementById('cf_equip').value = sourceEx ? sourceEx.equip : '';
-  document.getElementById('cf_group').value = sourceEx ? (sourceEx.group || sourceEx.name) : '';
+  document.getElementById('cf_group').value = sourceEx ? (sourceEx.group || (isEdit ? '' : sourceEx.name)) : '';
   document.getElementById('cf_pattern').value = sourceEx ? sourceEx.pattern : 'isolation';
   document.getElementById('cf_type').value = sourceEx ? sourceEx.type : 'isolation';
-  document.querySelector('.cf-title').textContent = sourceEx ? `New exercise (from ${sourceEx.name})` : 'New exercise';
+  document.querySelector('.cf-title').textContent = isEdit
+    ? `Edit exercise: ${sourceEx.name}`
+    : (sourceEx ? `New exercise (from ${sourceEx.name})` : 'New exercise');
+  document.getElementById('cf_save').textContent = isEdit ? 'Save changes' : 'Save exercise';
+  document.getElementById('cf_delete').style.display = (isEdit && sourceEx.custom) ? '' : 'none';
   renderCustomMuscleChips();
   document.getElementById('customForm').style.display = 'flex';
   document.getElementById('cf_name').focus();
@@ -1726,16 +1748,34 @@ document.getElementById('cf_save').addEventListener('click', ()=>{
   const pattern = document.getElementById('cf_pattern').value;
   const type = document.getElementById('cf_type').value;
   const group = document.getElementById('cf_group').value.trim() || null;
-  const id = uniqueId(slugify(name));
-  registerExercise({
-    id, name, equip, pattern, type, group,
-    primary: [...cfState.primary],
-    secondary: [...cfState.secondary],
-    custom: true,
-  });
+
+  if(cfState.editingId){
+    const ex = EX_MAP[cfState.editingId];
+    if(ex){
+      ex.name = name; ex.equip = equip; ex.pattern = pattern; ex.type = type; ex.group = group;
+      ex.primary = [...cfState.primary]; ex.secondary = [...cfState.secondary];
+      if(!ex.custom) editedBuiltins.add(ex.id);
+    }
+  } else {
+    const id = uniqueId(slugify(name));
+    registerExercise({
+      id, name, equip, pattern, type, group,
+      primary: [...cfState.primary],
+      secondary: [...cfState.secondary],
+      custom: true,
+    });
+  }
   document.getElementById('customForm').style.display = 'none';
   renderFilters();
   renderLibrary();
+  renderDays();
+  scheduleSave();
+});
+
+document.getElementById('cf_delete').addEventListener('click', ()=>{
+  if(!cfState.editingId) return;
+  const deleted = deleteExercise(cfState.editingId);
+  if(deleted) document.getElementById('customForm').style.display = 'none';
 });
 
 renderLegend();
