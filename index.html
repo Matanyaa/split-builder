@@ -414,9 +414,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.2.1';
+const APP_VERSION = 'v1.3.0';
 const APP_VERSION_DATE = '2026-08-16';
 const CHANGELOG = [
+  { version: 'v1.3.0', date: '2026-08-16', notes: 'Update mechanism now self-heals: the update banner rewrites the currently running document in place with the freshly fetched HTML, instead of relying on a browser reload (which could still hit stale cache). Single-file, no service worker needed. Fixes reopened app reverting to an old cached version.' },
   { version: 'v1.2.1', date: '2026-08-16', notes: 'Version bump only, to test the manual "Check for updates" button. No functional changes.' },
   { version: 'v1.2.0', date: '2026-08-16', notes: 'Added a manual "Check for updates" button next to the version tag, with visible status feedback (checking / up to date / offline).' },
   { version: 'v1.1.1', date: '2026-08-16', notes: 'Version bump only, to test the update-check banner. No functional changes.' },
@@ -1819,6 +1820,12 @@ document.getElementById('cf_delete').addEventListener('click', ()=>{
 
 document.getElementById('appVersion').textContent = `${APP_VERSION} · ${APP_VERSION_DATE}`;
 
+function applySelfUpdate(freshHtml){
+  document.open();
+  document.write(freshHtml);
+  document.close();
+}
+
 async function checkForUpdate(manual){
   const statusEl = document.getElementById('updateCheckStatus');
   if(manual) statusEl.textContent = 'Checking…';
@@ -1846,7 +1853,11 @@ async function checkForUpdate(manual){
       if(dismissed === remoteVersion) return;
     }
     document.getElementById('updateBanner').style.display = 'flex';
-    document.getElementById('updateReloadBtn').onclick = ()=> location.reload();
+    // We already have the fresh bytes in memory (fetched with cache:'no-store'), so
+    // updating just rewrites the current document in place — no dependency on the
+    // browser's HTTP cache for a fresh navigation, which is what caused the app to
+    // revert to a stale version after being closed and reopened.
+    document.getElementById('updateReloadBtn').onclick = ()=> applySelfUpdate(html);
     document.getElementById('updateDismiss').onclick = ()=>{
       localStorage.setItem('splitBuilderDismissedVersion', remoteVersion);
       document.getElementById('updateBanner').style.display = 'none';
@@ -1858,6 +1869,7 @@ async function checkForUpdate(manual){
 }
 checkForUpdate(false);
 document.getElementById('checkUpdateBtn').addEventListener('click', ()=> checkForUpdate(true));
+
 
 renderLegend();
 renderFilters();
