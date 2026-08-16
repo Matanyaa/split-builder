@@ -279,7 +279,11 @@
   </div>
   <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
     <div id="syncStatus" style="font-size:11px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.03em;">Loading…</div>
-    <div id="appVersion" title="App version" style="font-size:10px; color:var(--text-mute); font-family:'IBM Plex Mono',monospace; letter-spacing:0.02em;"></div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div id="appVersion" title="App version" style="font-size:10px; color:var(--text-mute); font-family:'IBM Plex Mono',monospace; letter-spacing:0.02em;"></div>
+      <span class="icon-btn text-btn" id="checkUpdateBtn" title="Check for a newer version">Check for updates</span>
+    </div>
+    <div id="updateCheckStatus" style="font-size:10px; color:var(--text-mute); min-height:12px;"></div>
   </div>
 </header>
 
@@ -410,9 +414,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.2.0';
 const APP_VERSION_DATE = '2026-08-16';
 const CHANGELOG = [
+  { version: 'v1.2.0', date: '2026-08-16', notes: 'Added a manual "Check for updates" button next to the version tag, with visible status feedback (checking / up to date / offline).' },
   { version: 'v1.1.1', date: '2026-08-16', notes: 'Version bump only, to test the update-check banner. No functional changes.' },
   { version: 'v1.1.0', date: '2026-08-16', notes: 'Added update-check: re-fetches index.html on load and offers a reload if a newer version is live. Never forces an update, and fails silently offline. Single-file only, no separate version file.' },
   { version: 'v1.0.0', date: '2026-08-16', notes: 'First tagged version. Edit ability for all exercises (including built-ins, persisted as overrides); delete for custom exercises.' },
@@ -1813,16 +1818,32 @@ document.getElementById('cf_delete').addEventListener('click', ()=>{
 
 document.getElementById('appVersion').textContent = `${APP_VERSION} · ${APP_VERSION_DATE}`;
 
-async function checkForUpdate(){
+async function checkForUpdate(manual){
+  const statusEl = document.getElementById('updateCheckStatus');
+  if(manual) statusEl.textContent = 'Checking…';
   try{
     const res = await fetch('./index.html?_=' + Date.now(), {cache:'no-store'});
-    if(!res.ok) return;
+    if(!res.ok){
+      if(manual) statusEl.textContent = 'Could not check (server error).';
+      return;
+    }
     const html = await res.text();
     const match = html.match(/const APP_VERSION\s*=\s*'([^']+)'/);
     const remoteVersion = match ? match[1] : null;
-    if(!remoteVersion || remoteVersion === APP_VERSION) return;
-    const dismissed = localStorage.getItem('splitBuilderDismissedVersion');
-    if(dismissed === remoteVersion) return;
+    if(!remoteVersion){
+      if(manual) statusEl.textContent = 'Could not read remote version.';
+      return;
+    }
+    if(remoteVersion === APP_VERSION){
+      if(manual) statusEl.textContent = `You're up to date (${APP_VERSION}).`;
+      return;
+    }
+    if(manual) statusEl.textContent = '';
+    // Manual checks always show the banner, even if the person dismissed this version before.
+    if(!manual){
+      const dismissed = localStorage.getItem('splitBuilderDismissedVersion');
+      if(dismissed === remoteVersion) return;
+    }
     document.getElementById('updateBanner').style.display = 'flex';
     document.getElementById('updateReloadBtn').onclick = ()=> location.reload();
     document.getElementById('updateDismiss').onclick = ()=>{
@@ -1830,10 +1851,12 @@ async function checkForUpdate(){
       document.getElementById('updateBanner').style.display = 'none';
     };
   }catch(err){
-    // Offline or request failed — say nothing, let the person keep using what they have.
+    // Offline or request failed.
+    if(manual) statusEl.textContent = "Couldn't reach the server — you may be offline.";
   }
 }
-checkForUpdate();
+checkForUpdate(false);
+document.getElementById('checkUpdateBtn').addEventListener('click', ()=> checkForUpdate(true));
 
 renderLegend();
 renderFilters();
