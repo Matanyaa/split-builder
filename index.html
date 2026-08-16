@@ -414,9 +414,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.3.1';
 const APP_VERSION_DATE = '2026-08-16';
 const CHANGELOG = [
+  { version: 'v1.3.1', date: '2026-08-16', notes: 'Version bump only, to test the self-updating (document.write) mechanism. No functional changes.' },
   { version: 'v1.3.0', date: '2026-08-16', notes: 'Update mechanism now self-heals: the update banner rewrites the currently running document in place with the freshly fetched HTML, instead of relying on a browser reload (which could still hit stale cache). Single-file, no service worker needed. Fixes reopened app reverting to an old cached version.' },
   { version: 'v1.2.1', date: '2026-08-16', notes: 'Version bump only, to test the manual "Check for updates" button. No functional changes.' },
   { version: 'v1.2.0', date: '2026-08-16', notes: 'Added a manual "Check for updates" button next to the version tag, with visible status feedback (checking / up to date / offline).' },
