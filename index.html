@@ -414,9 +414,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.3.2';
+const APP_VERSION = 'v1.3.3';
 const APP_VERSION_DATE = '2026-08-20';
 const CHANGELOG = [
+  { version: 'v1.3.3', date: '2026-08-20', notes: 'Update check now also re-runs whenever the app returns to the foreground (visibilitychange/pageshow), not just on initial load. Fixes home-screen PWAs staying on a stale version after being resumed from background instead of reloaded.' },
   { version: 'v1.3.2', date: '2026-08-20', notes: 'Version bump only, to test that the phone PWA picks up updates. No functional changes.' },
   { version: 'v1.3.1', date: '2026-08-16', notes: 'Version bump only, to test the self-updating (document.write) mechanism. No functional changes.' },
   { version: 'v1.3.0', date: '2026-08-16', notes: 'Update mechanism now self-heals: the update banner rewrites the currently running document in place with the freshly fetched HTML, instead of relying on a browser reload (which could still hit stale cache). Single-file, no service worker needed. Fixes reopened app reverting to an old cached version.' },
@@ -1871,6 +1872,13 @@ async function checkForUpdate(manual){
 }
 checkForUpdate(false);
 document.getElementById('checkUpdateBtn').addEventListener('click', ()=> checkForUpdate(true));
+// Re-check whenever the app comes back to the foreground. Home-screen PWAs on
+// phones are typically suspended (not reloaded) when backgrounded, so the
+// one-time check above can be running against a JS session that's hours old.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') checkForUpdate(false);
+});
+window.addEventListener('pageshow', ()=> checkForUpdate(false));
 
 
 renderLegend();
