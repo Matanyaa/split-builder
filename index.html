@@ -414,9 +414,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.3.3';
+const APP_VERSION = 'v1.3.4';
 const APP_VERSION_DATE = '2026-08-20';
 const CHANGELOG = [
+  { version: 'v1.3.4', date: '2026-08-20', notes: 'Fixed "Reload to update" hanging on a blank/stuck load: it used document.write() to rewrite the page in place, which reuses the existing JS scope and threw a SyntaxError on the redeclared top-level const/let (killing the whole script silently). Now does a real navigation to a cache-busted URL instead.' },
   { version: 'v1.3.3', date: '2026-08-20', notes: 'Update check now also re-runs whenever the app returns to the foreground (visibilitychange/pageshow), not just on initial load. Fixes home-screen PWAs staying on a stale version after being resumed from background instead of reloaded.' },
   { version: 'v1.3.2', date: '2026-08-20', notes: 'Version bump only, to test that the phone PWA picks up updates. No functional changes.' },
   { version: 'v1.3.1', date: '2026-08-16', notes: 'Version bump only, to test the self-updating (document.write) mechanism. No functional changes.' },
@@ -1823,10 +1824,15 @@ document.getElementById('cf_delete').addEventListener('click', ()=>{
 
 document.getElementById('appVersion').textContent = `${APP_VERSION} · ${APP_VERSION_DATE}`;
 
-function applySelfUpdate(freshHtml){
-  document.open();
-  document.write(freshHtml);
-  document.close();
+function applySelfUpdate(){
+  // A real navigation, not document.write(): rewriting the document in place
+  // reuses the existing JS global scope, so the freshly-parsed script's
+  // top-level `const`/`let` declarations collide with the ones already
+  // declared by the running page and throw a SyntaxError, silently killing
+  // the entire script. A genuine navigation gets a fresh scope, and the
+  // cache-busting query string still avoids the browser HTTP cache issue
+  // that caused the app to revert to a stale version after being reopened.
+  location.replace(location.pathname + '?_=' + Date.now());
 }
 
 async function checkForUpdate(manual){
@@ -1856,11 +1862,7 @@ async function checkForUpdate(manual){
       if(dismissed === remoteVersion) return;
     }
     document.getElementById('updateBanner').style.display = 'flex';
-    // We already have the fresh bytes in memory (fetched with cache:'no-store'), so
-    // updating just rewrites the current document in place — no dependency on the
-    // browser's HTTP cache for a fresh navigation, which is what caused the app to
-    // revert to a stale version after being closed and reopened.
-    document.getElementById('updateReloadBtn').onclick = ()=> applySelfUpdate(html);
+    document.getElementById('updateReloadBtn').onclick = applySelfUpdate;
     document.getElementById('updateDismiss').onclick = ()=>{
       localStorage.setItem('splitBuilderDismissedVersion', remoteVersion);
       document.getElementById('updateBanner').style.display = 'none';
