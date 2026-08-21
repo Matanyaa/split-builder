@@ -1,0 +1,129 @@
+{
+  "name": "Upper A / Upper B / Temp Legs",
+  "customExercises": [
+    {
+      "id": "seated_row_machine",
+      "name": "Seated Row (Machine)",
+      "equip": "Machine",
+      "pattern": "pull",
+      "type": "compound",
+      "primary": ["lats"],
+      "secondary": ["biceps", "traps"],
+      "group": "Row"
+    },
+    {
+      "id": "bicep_curl_machine",
+      "name": "Bicep Curl (Machine)",
+      "equip": "Machine",
+      "pattern": "isolation",
+      "type": "isolation",
+      "primary": ["biceps"],
+      "secondary": [],
+      "group": "Bicep Curl"
+    },
+    {
+      "id": "triceps_extension_machine",
+      "name": "Triceps Extension (Machine)",
+      "equip": "Machine",
+      "pattern": "isolation",
+      "type": "isolation",
+      "primary": ["triceps"],
+      "secondary": []
+    },
+    {
+      "id": "lat_pulldown_close_grip",
+      "name": "Lat Pulldown - Close Grip (Cable)",
+      "equip": "Cable",
+      "pattern": "pull",
+      "type": "compound",
+      "primary": ["lats"],
+      "secondary": ["biceps"],
+      "group": "Lat Pulldown"
+    },
+    {
+      "id": "chest_press_machine",
+      "name": "Chest Press (Machine)",
+      "equip": "Machine",
+      "pattern": "push",
+      "type": "compound",
+      "primary": ["chest"],
+      "secondary": ["triceps", "frontDelts"],
+      "group": "Bench Press"
+    },
+    {
+      "id": "rdl_dumbbell",
+      "name": "Romanian Deadlift (Dumbbell)",
+      "equip": "Dumbbell",
+      "pattern": "hinge",
+      "type": "compound",
+      "primary": ["hamstrings", "glutes"],
+      "secondary": []
+    },
+    {
+      "id": "calf_extension_machine",
+      "name": "Calf Extension (Machine)",
+      "equip": "Machine",
+      "pattern": "isolation",
+      "type": "isolation",
+      "primary": ["calves"],
+      "secondary": []
+    },
+    {
+      "id": "hip_abduction_machine",
+      "name": "Hip Abduction (Machine)",
+      "equip": "Machine",
+      "pattern": "isolation",
+      "type": "isolation",
+      "primary": ["glutes"],
+      "secondary": []
+    },
+    {
+      "id": "crunch",
+      "name": "Crunch",
+      "equip": "Bodyweight",
+      "pattern": "isolation",
+      "type": "isolation",
+      "primary": ["abs"],
+      "secondary": []
+    }
+  ],
+  "days": [
+    {
+      "name": "Upper A",
+      "items": [
+        { "exId": "bb_bench", "sets": 3, "reps": "8-10", "rest": 120, "notes": "" },
+        { "exId": "seated_row_machine", "sets": 3, "reps": "8-10", "rest": 90, "notes": "" },
+        { "exId": "upright_row_cable", "sets": 3, "reps": "10-12", "rest": 75, "notes": "1 light warm-up set before working sets" },
+        { "exId": "lat_pulldown", "sets": 3, "reps": "7-10", "rest": 90, "notes": "" },
+        { "exId": "pec_deck_fly", "sets": 2, "reps": "8-12", "rest": 60, "notes": "aka Butterfly" },
+        { "exId": "bicep_curl_machine", "sets": 2, "reps": "10-12", "rest": 60, "notes": "" },
+        { "exId": "triceps_extension_machine", "sets": 2, "reps": "9-12", "rest": 60, "notes": "" },
+        { "exId": "face_pull", "sets": 2, "reps": "20", "rest": 60, "notes": "" }
+      ]
+    },
+    {
+      "name": "Upper B",
+      "items": [
+        { "exId": "assisted_chinup", "sets": 3, "reps": "4-10", "rest": 120, "notes": "assist weight shown — lower assist weight = harder" },
+        { "exId": "incline_bb_bench", "sets": 3, "reps": "6-10", "rest": 120, "notes": "" },
+        { "exId": "seated_shoulder_press", "sets": 3, "reps": "6-10", "rest": 90, "notes": "" },
+        { "exId": "lat_pulldown_close_grip", "sets": 3, "reps": "10-12", "rest": 90, "notes": "" },
+        { "exId": "chest_press_machine", "sets": 2, "reps": "12", "rest": 90, "notes": "" },
+        { "exId": "cable_curl", "sets": 2, "reps": "12", "rest": 60, "notes": "" },
+        { "exId": "cable_pressdown", "sets": 2, "reps": "13-15", "rest": 60, "notes": "aka Triceps Pressdown" }
+      ]
+    },
+    {
+      "name": "Temp legs",
+      "items": [
+        { "exId": "leg_press", "sets": 4, "reps": "10-20", "rest": 120, "notes": "1 light warm-up set, then 3 working sets" },
+        { "exId": "rdl_dumbbell", "sets": 2, "reps": "10-12", "rest": 90, "notes": "" },
+        { "exId": "leg_extension", "sets": 3, "reps": "9-12", "rest": 75, "notes": "" },
+        { "exId": "seated_leg_curl", "sets": 3, "reps": "9-12", "rest": 75, "notes": "" },
+        { "exId": "calf_extension_machine", "sets": 4, "reps": "10-12", "rest": 60, "notes": "" },
+        { "exId": "hip_abduction_machine", "sets": 3, "reps": "12", "rest": 60, "notes": "" },
+        { "exId": "crunch", "sets": 2, "reps": "10-20", "rest": 45, "notes": "" }
+      ]
+    }
+  ]
+}
