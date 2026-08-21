@@ -229,6 +229,12 @@
   .icon-btn{cursor:pointer; color:var(--text-mute); font-size:13px; padding:2px 5px; border-radius:4px; flex-shrink:0;}
   .icon-btn:hover{color:var(--accent);}
   .icon-btn.text-btn{font-size:10px; text-transform:uppercase; letter-spacing:0.02em; border:1px dashed var(--border); padding:3px 7px;}
+  .icon-btn.home-toggle.active{background:var(--accent-dim); color:#fff;}
+  .slot.at-home{border-left:3px solid var(--accent);}
+  .home-badge{
+    font-size:9px; text-transform:uppercase; letter-spacing:0.04em; color:var(--accent);
+    border:1px solid var(--accent-dim); border-radius:4px; padding:2px 5px; flex-shrink:0; white-space:nowrap;
+  }
   .alt-row{display:flex; align-items:center; gap:6px; font-size:10px; color:var(--text-dim);}
   .alt-label{background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:3px 7px;}
 
@@ -414,9 +420,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.3.4';
-const APP_VERSION_DATE = '2026-08-20';
+const APP_VERSION = 'v1.4.0';
+const APP_VERSION_DATE = '2026-08-21';
 const CHANGELOG = [
+  { version: 'v1.4.0', date: '2026-08-21', notes: 'Exercises in a routine can now be marked "done at home" (🏠 toggle on each exercise card) — flags it as done later that day outside the gym session, while still counting toward that day\'s set counts and muscle load.' },
   { version: 'v1.3.4', date: '2026-08-20', notes: 'Fixed "Reload to update" hanging on a blank/stuck load: it used document.write() to rewrite the page in place, which reuses the existing JS scope and threw a SyntaxError on the redeclared top-level const/let (killing the whole script silently). Now does a real navigation to a cache-busted URL instead.' },
   { version: 'v1.3.3', date: '2026-08-20', notes: 'Update check now also re-runs whenever the app returns to the foreground (visibilitychange/pageshow), not just on initial load. Fixes home-screen PWAs staying on a stale version after being resumed from background instead of reloaded.' },
   { version: 'v1.3.2', date: '2026-08-20', notes: 'Version bump only, to test that the phone PWA picks up updates. No functional changes.' },
@@ -984,7 +991,7 @@ libraryPanel.addEventListener('drop', e=>{
 });
 
 function addToDay(dayIdx, exId){
-  state.days[dayIdx].items.push({exId, sets:3, reps:'8-12', rest:90, notes:'', altExId:null});
+  state.days[dayIdx].items.push({exId, sets:3, reps:'8-12', rest:90, notes:'', altExId:null, atHome:false});
   renderDays();
 }
 
@@ -1038,11 +1045,13 @@ function dayHTML(day, idx, totalDays){
          <span class="icon-btn" data-day="${idx}" data-item="${i}" data-action="swap-alt" title="Swap to alternative">🔁</span>
          <span class="icon-btn" data-day="${idx}" data-item="${i}" data-action="clear-alt" title="Remove alternative">✕</span>`
       : `<span class="icon-btn text-btn" data-day="${idx}" data-item="${i}" data-action="set-alt" title="Set an alternative (e.g. if a machine is taken)">+ Alternative</span>`;
-    return `<div class="slot" draggable="true" data-day="${idx}" data-item="${i}">
+    return `<div class="slot${it.atHome?' at-home':''}" draggable="true" data-day="${idx}" data-item="${i}">
       <div class="slot-row1">
         <span class="drag-handle" title="Drag to reorder or drag out to library to remove">⠿</span>
         <div class="slot-name" title="${ex.name}">${ex.name}</div>
+        ${it.atHome ? `<span class="home-badge" title="Done at home later today — not part of the gym session, still counts toward this day's sets">HOME</span>` : ''}
         ${muscleStripHTML(ex)}
+        <span class="icon-btn home-toggle${it.atHome?' active':''}" data-day="${idx}" data-item="${i}" data-action="toggle-home" title="${it.atHome ? 'Unmark — back to the gym session' : 'Mark as done at home later today (not part of the gym session, still counts toward this day\'s sets)'}">🏠</span>
         <span class="icon-btn" data-day="${idx}" data-item="${i}" data-action="replace" title="Replace with an alternative exercise">⇄</span>
         <span class="x" data-day="${idx}" data-item="${i}" title="Remove">✕</span>
       </div>
@@ -1139,7 +1148,7 @@ function renderDays(){
       if(data.type === 'add'){
         const ex = EX_MAP[data.exId];
         if(!ex) return;
-        state.days[targetDay].items.splice(before?targetIndex:targetIndex+1, 0, {exId:data.exId, sets:3, reps:'8-12', rest:90, notes:'', altExId:null});
+        state.days[targetDay].items.splice(before?targetIndex:targetIndex+1, 0, {exId:data.exId, sets:3, reps:'8-12', rest:90, notes:'', altExId:null, atHome:false});
         renderDays();
       } else if(data.type === 'move'){
         const sourceDay = data.day, sourceIndex = data.index;
@@ -1288,7 +1297,7 @@ function renderDays(){
           state.days[d].items[i] = {
             exId: pickedId,
             sets: it.sets ?? 3, reps: it.reps || '8-12', rest: it.rest ?? 90, notes: it.notes || '',
-            altExId: null,
+            altExId: null, atHome: false,
           };
           renderDays();
         });
@@ -1314,6 +1323,9 @@ function renderDays(){
         renderDays();
       } else if(action === 'clear-alt'){
         it.altExId = null;
+        renderDays();
+      } else if(action === 'toggle-home'){
+        it.atHome = !it.atHome;
         renderDays();
       }
     });
@@ -1401,6 +1413,7 @@ document.getElementById('fileInput').addEventListener('change', e=>{
             rest: it.rest !== undefined ? parseInt(it.rest) : 90,
             notes: it.notes || '',
             altExId: (it.altExId && EX_MAP[it.altExId]) ? it.altExId : null,
+            atHome: !!it.atHome,
           };
         }),
       }));
