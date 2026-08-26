@@ -274,6 +274,27 @@
   .weekly-section{margin-top:24px; padding-top:16px; border-top:1px solid var(--border);}
   .weekly-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px;}
   @media (max-width:700px){ .weekly-grid{grid-template-columns:1fr;} }
+  .weekly-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+  .weekly-head h2{margin-bottom:0;}
+
+  .weekly-bar-block{margin-bottom:7px;}
+  .bar-track{position:relative;}
+  .bar-tick{position:absolute; top:0; bottom:0; width:2px;}
+  .bar-tick-mev{background:rgba(241,239,230,0.4);}
+  .bar-tick-mav{background:rgba(241,239,230,0.85);}
+  .bar-fill-over{filter:saturate(1.6) brightness(1.15);}
+  .bar-quota{font-size:9.5px; color:var(--text-mute); font-family:'IBM Plex Mono',monospace; margin:2px 0 0 80px;}
+  .bar-quota.quota-under{color:#e8ab35;}
+  .bar-quota.quota-over{color:#e5544c;}
+  .bar-quota.quota-ok{color:#2ba57e;}
+
+  .landmarks-panel{background:var(--panel2); border:1px solid var(--border-soft); border-radius:8px; padding:10px 12px; margin-bottom:14px;}
+  .landmarks-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:8px 16px;}
+  .landmark-row{display:flex; align-items:center; gap:8px;}
+  .landmark-label{flex:1 1 auto; min-width:78px; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.02em; border-left:3px solid var(--border); padding-left:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .landmark-row label{display:flex; align-items:center; gap:4px; font-size:9px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.02em;}
+  .landmark-input{width:44px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:2px 4px; font-size:11px; font-family:'IBM Plex Mono',monospace;}
+  .landmarks-hint{font-size:10px; color:var(--text-mute); margin-top:8px;}
 </style>
 </head>
 <body>
@@ -397,7 +418,15 @@
     <div class="days" id="days"></div>
 
     <div class="weekly-section">
-      <h2 style="font-size:20px; margin-bottom:10px;">Weekly muscle load (all days combined)</h2>
+      <div class="weekly-head">
+        <h2 style="font-size:20px;">Weekly muscle load (all days combined)</h2>
+        <div class="row">
+          <button class="btn small" id="editLandmarksBtn">Edit MEV/MAV</button>
+          <button class="btn small" id="loadLandmarksBtn">Load landmarks file</button>
+          <input type="file" id="landmarksFileInput" accept="application/json">
+        </div>
+      </div>
+      <div id="landmarksPanel" class="landmarks-panel" style="display:none;"></div>
       <div id="weeklyChart"></div>
     </div>
   </div>
@@ -420,9 +449,10 @@
    MINOR = new features
    PATCH = fixes / small tweaks
    Bump this (and add a line below) whenever a new version is deployed. */
-const APP_VERSION = 'v1.4.0';
-const APP_VERSION_DATE = '2026-08-21';
+const APP_VERSION = 'v1.5.0';
+const APP_VERSION_DATE = '2026-08-26';
 const CHANGELOG = [
+  { version: 'v1.5.0', date: '2026-08-26', notes: 'Added per-muscle MEV/MAV volume landmarks: enter and edit weekly set targets manually or load them from a JSON file, see them against your weekly muscle load as you build (with a live "sets left to MAV" readout that goes negative once you exceed it), and they now save/export/import with the rest of the split.' },
   { version: 'v1.4.0', date: '2026-08-21', notes: 'Exercises in a routine can now be marked "done at home" (🏠 toggle on each exercise card) — flags it as done later that day outside the gym session, while still counting toward that day\'s set counts and muscle load.' },
   { version: 'v1.3.4', date: '2026-08-20', notes: 'Fixed "Reload to update" hanging on a blank/stuck load: it used document.write() to rewrite the page in place, which reuses the existing JS scope and threw a SyntaxError on the redeclared top-level const/let (killing the whole script silently). Now does a real navigation to a cache-busted URL instead.' },
   { version: 'v1.3.3', date: '2026-08-20', notes: 'Update check now also re-runs whenever the app returns to the foreground (visibilitychange/pageshow), not just on initial load. Fixes home-screen PWAs staying on a stale version after being resumed from background instead of reloaded.' },
@@ -607,6 +637,7 @@ let state = {
     {name:'Upper 2', items:[]},
     {name:'Lower 2', items:[]},
   ],
+  volumeLandmarks: {}, // key -> {mev, mav}, sets/week. Missing/zero = not configured.
 };
 
 /* ---------- Firebase persistence ---------- */
@@ -653,7 +684,7 @@ async function saveToFirestore(){
       id: ex.id, name: ex.name, equip: ex.equip, pattern: ex.pattern, type: ex.type,
       group: ex.group, primary: ex.primary, secondary: ex.secondary,
     }));
-    const payload = {name: state.name, days: state.days, customExercises, builtinOverrides};
+    const payload = {name: state.name, days: state.days, customExercises, builtinOverrides, volumeLandmarks: state.volumeLandmarks};
     await splitDocRef.set({
       data: payload,
       updated_at: firebase.firestore.FieldValue.serverTimestamp(),
@@ -693,6 +724,7 @@ async function loadFromFirestore(){
       }
       if(payload.name) state.name = payload.name;
       if(Array.isArray(payload.days)) state.days = payload.days;
+      if(payload.volumeLandmarks && typeof payload.volumeLandmarks === 'object') mergeLandmarks(payload.volumeLandmarks);
       setSyncStatus('Loaded from cloud');
     } else {
       setSyncStatus('No saved split yet — starting fresh');
@@ -703,6 +735,20 @@ async function loadFromFirestore(){
   }finally{
     isLoading = false;
   }
+}
+
+function mergeLandmarks(src){
+  let applied = 0;
+  if(src && typeof src === 'object'){
+    Object.entries(src).forEach(([key, val])=>{
+      if(!MUSCLE_MAP[key] || !val || typeof val !== 'object') return;
+      const mev = Math.max(0, parseFloat(val.mev) || 0);
+      const mav = Math.max(0, parseFloat(val.mav) || 0);
+      state.volumeLandmarks[key] = {mev, mav};
+      applied++;
+    });
+  }
+  return applied;
 }
 
 function muscleChip(key, secondary){
@@ -1021,6 +1067,76 @@ function barsHTML(scores){
   }).join('');
 }
 
+function weeklyBarsHTML(scores){
+  const keys = MUSCLES.map(m=>m.key).filter(k=>{
+    const land = state.volumeLandmarks[k];
+    return (scores[k]||0) > 0 || (land && (land.mev>0 || land.mav>0));
+  });
+  if(!keys.length) return `<div class="empty-hint" style="text-align:left; padding:4px 0;">No load yet.</div>`;
+  keys.sort((a,b)=>(scores[b]||0)-(scores[a]||0));
+  const globalMax = Math.max(1, ...keys.map(k=>{
+    const land = state.volumeLandmarks[k] || {};
+    return Math.max(scores[k]||0, land.mav||0);
+  })) * 1.05; // headroom so a MAV tick right at the max isn't clipped by the track's rounded edge
+  return keys.map(k=>{
+    const m = MUSCLE_MAP[k];
+    const val = scores[k]||0;
+    const land = state.volumeLandmarks[k] || {mev:0, mav:0};
+    const hasLandmark = land.mev>0 || land.mav>0;
+    const pct = Math.min(100, val/globalMax*100).toFixed(1);
+    let quotaHTML = '';
+    let overClass = '';
+    let ticksHTML = '';
+    if(hasLandmark){
+      const mevPct = Math.min(100, land.mev/globalMax*100).toFixed(1);
+      const mavPct = Math.min(100, land.mav/globalMax*100).toFixed(1);
+      const remaining = land.mav - val;
+      const status = val < land.mev ? 'under' : (val > land.mav ? 'over' : 'ok');
+      overClass = status === 'over' ? ' bar-fill-over' : '';
+      quotaHTML = `<div class="bar-quota quota-${status}">MEV ${land.mev} · MAV ${land.mav} · left to MAV: ${remaining.toFixed(1)}</div>`;
+      ticksHTML = `<div class="bar-tick bar-tick-mev" style="left:${mevPct}%" title="MEV ${land.mev}"></div>` +
+        `<div class="bar-tick bar-tick-mav" style="left:${mavPct}%" title="MAV ${land.mav}"></div>`;
+    }
+    return `<div class="weekly-bar-block">
+      <div class="bar-row">
+        <div class="bar-label">${m.label}</div>
+        <div class="bar-track">
+          <div class="bar-fill${overClass}" style="width:${pct}%; background:${m.color}"></div>
+          ${ticksHTML}
+        </div>
+        <div class="bar-val">${val.toFixed(1)}</div>
+      </div>
+      ${quotaHTML}
+    </div>`;
+  }).join('');
+}
+
+function renderLandmarksPanel(){
+  const panel = document.getElementById('landmarksPanel');
+  if(!panel) return;
+  panel.innerHTML = `<div class="landmarks-grid">` + MUSCLES.map(m=>{
+    const land = state.volumeLandmarks[m.key] || {mev:0, mav:0};
+    return `<div class="landmark-row">
+      <span class="landmark-label" style="border-left-color:${m.color}">${m.label}</span>
+      <label>MEV<input type="number" min="0" step="1" value="${land.mev||0}" data-muscle="${m.key}" data-field="mev" class="landmark-input"></label>
+      <label>MAV<input type="number" min="0" step="1" value="${land.mav||0}" data-muscle="${m.key}" data-field="mav" class="landmark-input"></label>
+    </div>`;
+  }).join('') + `</div>
+  <div class="landmarks-hint">Sets/week per muscle. Leave both at 0 to hide quota tracking for that muscle.</div>`;
+
+  panel.querySelectorAll('.landmark-input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const key = inp.dataset.muscle;
+      const field = inp.dataset.field;
+      const val = Math.max(0, parseFloat(inp.value) || 0);
+      if(!state.volumeLandmarks[key]) state.volumeLandmarks[key] = {mev:0, mav:0};
+      state.volumeLandmarks[key][field] = val;
+      renderWeekly();
+      scheduleSave();
+    });
+  });
+}
+
 function dayHTML(day, idx, totalDays){
   const itemsHTML = day.items.map((it,i)=>{
     if(it.placeholder){
@@ -1337,7 +1453,7 @@ function renderDays(){
 
 function renderWeekly(){
   const allItems = state.days.flatMap(d=>d.items);
-  document.getElementById('weeklyChart').innerHTML = barsHTML(computeMuscleScores(allItems));
+  document.getElementById('weeklyChart').innerHTML = weeklyBarsHTML(computeMuscleScores(allItems));
 }
 
 document.getElementById('search').addEventListener('input', e=>{ state.search = e.target.value; renderLibrary(); });
@@ -1420,11 +1536,46 @@ document.getElementById('fileInput').addEventListener('change', e=>{
       const defaultName = file.name.replace(/\.[^/.]+$/, '');
       state.name = data.name || defaultName;
       state.days = cleanDays;
+      if(data.volumeLandmarks && typeof data.volumeLandmarks === 'object') mergeLandmarks(data.volumeLandmarks);
       document.getElementById('splitName').value = state.name;
+      renderLandmarksPanel();
       renderDays();
       if(skipped.length){
         alert('Loaded, but skipped unknown exercise id(s): ' + skipped.join(', '));
       }
+    }catch(err){
+      alert('Could not read that file: ' + err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('editLandmarksBtn').addEventListener('click', ()=>{
+  const panel = document.getElementById('landmarksPanel');
+  const showing = panel.style.display !== 'none';
+  panel.style.display = showing ? 'none' : 'block';
+  document.getElementById('editLandmarksBtn').textContent = showing ? 'Edit MEV/MAV' : 'Hide MEV/MAV editor';
+});
+
+document.getElementById('loadLandmarksBtn').addEventListener('click', ()=>{
+  document.getElementById('landmarksFileInput').click();
+});
+
+document.getElementById('landmarksFileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt=>{
+    try{
+      const data = JSON.parse(evt.target.result);
+      const src = (data && typeof data === 'object' && data.volumeLandmarks) ? data.volumeLandmarks : data;
+      const applied = mergeLandmarks(src);
+      if(!applied) throw new Error('No recognized muscle keys found');
+      renderLandmarksPanel();
+      renderWeekly();
+      scheduleSave();
+      alert(`Loaded landmarks for ${applied} muscle${applied===1?'':'s'}.`);
     }catch(err){
       alert('Could not read that file: ' + err.message);
     }
@@ -1443,7 +1594,7 @@ document.getElementById('exportBtn').addEventListener('click', ()=>{
   const customExercises = [...usedExIds]
     .map(id=>EX_MAP[id])
     .filter(ex=>ex && ex.custom);
-  const data = {name: state.name, customExercises, days: state.days};
+  const data = {name: state.name, customExercises, days: state.days, volumeLandmarks: state.volumeLandmarks};
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1899,12 +2050,14 @@ window.addEventListener('pageshow', ()=> checkForUpdate(false));
 renderLegend();
 renderFilters();
 renderLibrary();
+renderLandmarksPanel();
 
 (async ()=>{
   await loadFromFirestore();
   document.getElementById('splitName').value = state.name;
   renderFilters();
   renderLibrary();
+  renderLandmarksPanel();
   renderDays();
 })();
 </script>
